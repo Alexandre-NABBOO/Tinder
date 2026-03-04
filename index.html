@@ -136,7 +136,7 @@
 
   /* ── VERSION BADGE ── */
   #version-badge {
-    position: fixed; bottom: 16px; right: 16px;
+    position: fixed; top: 16px; left: 16px;
     background: #0f172a; border: 1px solid #334155;
     border-radius: 8px; padding: 5px 12px;
     font-size: 11px; color: #475569; font-weight: 700; letter-spacing: 0.1em; z-index: 100;
@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.3</div>
+<div id="version-badge">v2.5</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -280,29 +280,45 @@ async function boondGet(path, userToken, clientToken, clientKey){
 }
 
 function normalizeNeed(raw){
+  // TAB_AO: Appel d'offres / Opportunité Boond
   const attr = raw.attributes || raw;
+  const rels  = raw.relationships || {};
+
+  // Compétences: AO_OUTILS format "tool1|level#tool2|level"
+  let skills = [];
+  if(attr.tools){
+    skills = String(attr.tools).split('|').map(s=>s.split('#')[0].trim()).filter(Boolean);
+  }
+
+  // TJM depuis AO_TAUXHORAIRE
+  const tjm = attr.averageDailyRate || attr.dailyRate || (attr.tauxHoraire ? attr.tauxHoraire+'€/j' : null) || "—";
+
+  // Manager depuis relationships
+  const managerData = rels.mainManager?.data || rels.manager?.data || {};
+  const managerName = attr.managerName || (managerData.firstName&&managerData.lastName ? `${managerData.firstName} ${managerData.lastName}` : null) || "—";
+
+  // Client depuis relationships
+  const clientData = rels.company?.data || rels.customer?.data || {};
+  const clientName = attr.companyName || clientData.name || "—";
+
   return {
-    id:          raw.id || attr.reference || "—",
+    id:          raw.id || attr.reference || attr.ref || "—",
     title:       attr.title || attr.name || "Sans titre",
-    client:      (attr.customer&&attr.customer.name) || attr.clientName || (attr.account&&attr.account.name) || "—",
-    startDate:   attr.startDate || attr.start_date || "—",
-    endDate:     attr.endDate   || attr.end_date   || "—",
-    duration:    attr.duration  || "—",
-    location:    attr.location  || attr.city       || "—",
-    tjm:         attr.averageDailyRate
-                   ? `${attr.averageDailyRate.min||'?'}–${attr.averageDailyRate.max||'?'}`
-                   : (attr.tjm || "—"),
-    skills:      Array.isArray(attr.skills)
-                   ? attr.skills.map(s => typeof s==='string'?s:(s.name||s.label||''))
-                   : [],
-    description: attr.description || attr.comment || "",
+    client:      clientName,
+    startDate:   attr.startDate || attr.start || attr.debut || "—",
+    endDate:     attr.endDate   || attr.end   || attr.fin   || "—",
+    duration:    attr.duration  || (attr.duree ? attr.duree+' jours' : "—"),
+    location:    attr.location  || attr.lieu  || attr.city  || "—",
+    tjm:         typeof tjm === 'number' ? tjm+'€/j' : tjm,
+    skills:      skills,
+    description: attr.description || attr.criteres || attr.comment || "",
     manager:{
-      name:  (attr.manager&&attr.manager.name)  || (attr.contact&&attr.contact.name)  || "—",
-      email: (attr.manager&&attr.manager.email) || (attr.contact&&attr.contact.email) || "—",
-      phone: (attr.manager&&attr.manager.phone) || (attr.contact&&attr.contact.phone) || "—",
+      name:  managerName,
+      email: attr.managerEmail || "—",
+      phone: attr.managerPhone || "—",
     },
-    status:   attr.state || attr.status || "active",
-    priority: attr.priority || "medium",
+    status:   attr.state !== undefined ? String(attr.state) : "active",
+    priority: attr.priority || (attr.proba >= 70 ? "high" : attr.proba >= 40 ? "medium" : "low"),
   };
 }
 
@@ -405,7 +421,7 @@ function bindLogin(){
     if(!ut.value||!ct.value||!ck.value||!cl.value){ err.textContent='Renseigne les 4 champs.'; err.style.display='block'; return; }
     btn.textContent='Connexion en cours…'; btn.disabled=true; btn.className='btn btn-disabled';
     try{
-      await boondGet('/needs?page=1&maxResults=1', ut.value, ct.value, ck.value);
+      await boondGet('/users/current', ut.value, ct.value, ck.value);
       state.userToken=ut.value; state.clientToken=ct.value; state.clientKey=ck.value; state.claudeKey=cl.value; state.isMock=false;
       state.step=1; render();
     }catch(e){
@@ -448,7 +464,7 @@ async function bindSelector(){
       await new Promise(r=>setTimeout(r,600));
       state.needs = MOCK_NEEDS;
     }else{
-      const data = await boondGet('/needs?state=1&maxResults=50', state.userToken, state.clientToken, state.clientKey);
+      const data = await boondGet('/opportunities?maxResults=50', state.userToken, state.clientToken, state.clientKey);
       const items = data.data || data.needs || data || [];
       state.needs = items.map(normalizeNeed);
     }
