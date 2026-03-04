@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BoondMatch — NABBOO.AI</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #020617;
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    color: #f1f5f9;
+    min-height: 100vh;
+    padding: 28px 16px 60px;
+  }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #0f172a; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+  #app { max-width: 640px; margin: 0 auto; }
+
+  /* ── HEADER ── */
+  .header { text-align: center; margin-bottom: 36px; }
+  .header-dots { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
+  .brand { font-size: 10px; color: #f59e0b; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 700; }
+  .title { font-size: 28px; font-weight: 900; color: #f8fafc; letter-spacing: -0.02em; }
+  .title span { color: #f59e0b; }
+  .subtitle { font-size: 11px; color: #475569; margin-top: 5px; letter-spacing: 0.1em; }
+
+  /* ── STEPBAR ── */
+  .stepbar { display: flex; align-items: center; margin-bottom: 36px; }
+  .step-item { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 60px; }
+  .step-circle {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; transition: all 0.3s;
+    border: 2px solid transparent;
+  }
+  .step-circle.done { background: #22c55e; color: #fff; }
+  .step-circle.active { background: #f59e0b; color: #fff; border-color: #fbbf24; box-shadow: 0 0 16px #f59e0b88; }
+  .step-circle.pending { background: #1e293b; color: #64748b; }
+  .step-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  .step-label.done { color: #22c55e; }
+  .step-label.active { color: #f59e0b; font-weight: 700; }
+  .step-label.pending { color: #475569; }
+  .step-line { flex: 1; height: 2px; margin: -20px 6px 0; transition: background 0.4s; }
+  .step-line.done { background: #22c55e; }
+  .step-line.pending { background: #1e293b; }
+
+  /* ── CARDS ── */
+  .card {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    border: 1px solid #334155; border-radius: 16px; padding: 24px 28px; margin-bottom: 16px;
+  }
+  .card-dark { background: #1e293b; border: 1px solid #1e293b; border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+  .card-black { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 16px 18px; }
+
+  /* ── LABELS ── */
+  .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; display: block; }
+
+  /* ── INPUTS ── */
+  input[type=text], input[type=password] {
+    width: 100%; background: #0f172a; border: 1px solid #334155;
+    border-radius: 8px; color: #f1f5f9; font-size: 13px;
+    padding: 11px 14px; font-family: inherit; outline: none;
+  }
+  input::placeholder { color: #334155; }
+  input:focus { border-color: #475569; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    width: 100%; padding: 14px; border: none; border-radius: 12px;
+    font-size: 14px; font-weight: 800; cursor: pointer;
+    font-family: inherit; transition: all 0.2s; letter-spacing: 0.02em;
+  }
+  .btn-amber { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; box-shadow: 0 4px 20px #f59e0b44; }
+  .btn-amber:hover { box-shadow: 0 6px 28px #f59e0b66; }
+  .btn-blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; box-shadow: 0 4px 20px #3b82f644; }
+  .btn-green { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; box-shadow: 0 4px 20px #16a34a44; }
+  .btn-wa { background: linear-gradient(135deg, #25d366, #128c7e); color: #fff; }
+  .btn-ghost { background: #0f172a; border: 1px solid #334155; color: #94a3b8; border-radius: 8px; padding: 9px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-disabled { background: #1e293b; color: #475569; cursor: not-allowed; box-shadow: none; }
+
+  /* ── SKILL TAGS ── */
+  .tag { background: #1e3a5f; border: 1px solid #2563eb44; color: #93c5fd; border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: 600; display: inline-block; }
+
+  /* ── PRIORITY ── */
+  .priority-high { background: #ef444422; color: #ef4444; border: 1px solid #ef444444; }
+  .priority-medium { background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b44; }
+  .priority-low { background: #22c55e22; color: #22c55e; border: 1px solid #22c55e44; }
+  .priority-badge { font-size: 9px; padding: 2px 7px; border-radius: 4px; font-weight: 700; text-transform: uppercase; display: inline-block; }
+
+  /* ── AVATAR ── */
+  .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .avatar-amber { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  .avatar-blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+  .avatar-gray { background: linear-gradient(135deg, #334155, #1e293b); color: #94a3b8; }
+  .avatar-green { background: linear-gradient(135deg, #25d366, #128c7e); }
+
+  /* ── CHECKBOX ── */
+  .checkbox {
+    width: 18px; height: 18px; border-radius: 4px; border: 2px solid #334155;
+    background: transparent; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #fff; flex-shrink: 0; cursor: pointer; transition: all 0.2s;
+  }
+  .checkbox.checked { border-color: #3b82f6; background: #3b82f6; }
+
+  /* ── SCORE ── */
+  .score-high { color: #4ade80; }
+  .score-mid  { color: #f59e0b; }
+  .score-low  { color: #ef4444; }
+
+  /* ── MISC ── */
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .mini-card { background: #0f172a; border-radius: 8px; padding: 10px 12px; }
+  .mini-label { font-size: 10px; color: #475569; text-transform: uppercase; margin-bottom: 3px; }
+  .mini-val { font-size: 12px; color: #e2e8f0; font-weight: 600; }
+  .flex-row { display: flex; align-items: center; gap: 12px; }
+  .flex-1 { flex: 1; }
+  .mt8 { margin-top: 8px; }
+  .mb12 { margin-bottom: 12px; }
+  .mb16 { margin-bottom: 16px; }
+  .mb20 { margin-bottom: 20px; }
+  .tags-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  textarea { width: 100%; background: #0f172a; border: 1px solid #1e293b; border-radius: 10px; color: #cbd5e1; font-size: 12px; padding: 13px 15px; resize: vertical; font-family: inherit; line-height: 1.7; outline: none; }
+
+  /* ── ANIMATIONS ── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes spin   { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  .anim-pulse { animation: pulse 1s infinite; }
+  .anim-blink { animation: blink 0.8s infinite; }
+  .anim-spin  { display:inline-block; animation: spin 1.5s linear infinite; }
+
+  /* ── VERSION BADGE ── */
+  #version-badge {
+    position: fixed; bottom: 16px; right: 16px;
+    background: #0f172a; border: 1px solid #334155;
+    border-radius: 8px; padding: 5px 12px;
+    font-size: 11px; color: #475569; font-weight: 700; letter-spacing: 0.1em; z-index: 100;
+  }
+
+  /* ── ERROR BOX ── */
+  .error-box { background: #450a0a; border: 1px solid #dc262644; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #fca5a5; margin-bottom: 14px; }
+  .info-box { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 14px 18px; font-size: 12px; color: #475569; line-height: 1.8; }
+
+  /* ── ANALYSIS STREAM ── */
+  #stream-box { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; min-height: 80px; }
+  .stream-header { font-size: 11px; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .stream-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+  #stream-text { font-size: 13px; color: #cbd5e1; line-height: 1.8; white-space: pre-wrap; }
+
+  /* ── NEED ITEM ── */
+  .need-item { border-radius: 12px; cursor: pointer; margin-bottom: 8px; overflow: hidden; transition: all 0.2s; }
+  .need-header { padding: 14px 18px; display: flex; align-items: flex-start; gap: 12px; }
+  .need-header:hover { filter: brightness(1.05); }
+  .need-body { padding: 14px 18px; border-top: none; }
+  .need-item.selected .need-header { background: linear-gradient(135deg, #1e3a5f, #1e293b); border: 1px solid #3b82f6; border-bottom: none; }
+  .need-item.selected .need-body { background: #0f172a; border: 1px solid #3b82f644; border-top: none; border-radius: 0 0 12px 12px; }
+  .need-item:not(.selected) .need-header { background: #1e293b; border: 1px solid #1e293b; }
+  .need-item:not(.selected) .need-body { display: none; }
+
+  /* ── CANDIDATE ROW ── */
+  .candidate-row { padding: 12px 16px; border-radius: 10px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all 0.2s; }
+  .candidate-row.selected { background: #1e3a5f; border: 1px solid #3b82f6; }
+  .candidate-row:not(.selected) { background: #0f172a; border: 1px solid #1e293b; }
+
+  /* ── WA card ── */
+  .wa-card { background: #1e293b; border-radius: 12px; padding: 18px; margin-bottom: 14px; border: 1px solid #1e293b; }
+  .wa-card.sent { border-color: #16a34a44; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-regen { flex: 1; }
+  .btn-send  { flex: 2; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px; border: none; border-radius: 7px; font-size: 12px; font-weight: 800; cursor: pointer; font-family: inherit; }
+  .btn-send:disabled { background: #1e293b; color: #475569; cursor: not-allowed; }
+
+  /* search */
+  .search-wrap { position: relative; margin-bottom: 16px; }
+  .search-wrap input { padding-left: 36px; }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #475569; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="header">
+    <div class="header-dots">
+      <div class="dot"></div>
+      <span class="brand">NABBOO.AI</span>
+      <div class="dot"></div>
+    </div>
+    <div class="title">BOOND<span>MATCH</span></div>
+    <div class="subtitle">Matching IA · Validation Manager · WhatsApp</div>
+  </div>
+  <div id="stepbar"></div>
+  <div id="screen"></div>
+</div>
+
+<div id="version-badge">v2.1</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const state = {
+  step: 0,
+  userToken: null,
+  clientToken: null,
+  clientKey: null,
+  isMock: false,
+  needs: [],
+  selectedNeedId: null,
+  expandedNeedId: null,
+  need: null,
+  scored: [],
+  selectedCandidates: [],
+  validated: [],
+  waMessages: {},
+  waGenerating: {},
+  waSent: {},
+  search: '',
+};
+
+// ═══════════════════════════════════════════════════════
+// MOCK DATA
+// ═══════════════════════════════════════════════════════
+const MOCK_NEEDS = [
+  { id:"N-2024-089", title:"Ingénieur Nucléaire – Systèmes de contrôle-commande", client:"CEA Cadarache", startDate:"2024-04-01", endDate:"2025-03-31", duration:"12 mois", location:"Cadarache (13)", tjm:"650–750", skills:["I&C","Contrôle-commande","TELEPERM XS","Sûreté nucléaire","VD3"], description:"Mission de support ingénierie pour la rénovation des systèmes de contrôle-commande réacteur. Expérience requise en qualification matériels sûreté et rédaction de dossiers techniques.", manager:{name:"Alexandre Dupont",email:"a.dupont@nabboo.fr",phone:"+33612345678"}, status:"active", priority:"high" },
+  { id:"N-2024-092", title:"Chef de projet Defence – Systèmes embarqués", client:"Naval Group", startDate:"2024-05-01", endDate:"2025-04-30", duration:"12 mois", location:"Toulon (83)", tjm:"700–800", skills:["Systèmes embarqués","Gestion de projet","Defence","DO-178C"], description:"Pilotage d'un projet de développement de systèmes embarqués critiques pour sous-marins. Coordination équipes pluridisciplinaires.", manager:{name:"Sophie Renard",email:"s.renard@nabboo.fr",phone:"+33698765432"}, status:"active", priority:"medium" },
+  { id:"N-2024-097", title:"Ingénieur Mécanique – Conception VACOA", client:"EDF DIPNN", startDate:"2024-03-15", endDate:"2024-09-14", duration:"6 mois", location:"Lyon (69)", tjm:"550–650", skills:["CATIA V5","Mécanique","RCC-M","Tuyauterie"], description:"Conception et modification de tuyauteries pour tranche nucléaire. Maîtrise RCC-M et outils DAO obligatoire.", manager:{name:"Marc Lefevre",email:"m.lefevre@nabboo.fr",phone:"+33645678901"}, status:"active", priority:"high" },
+];
+
+const MOCK_CANDIDATES = [
+  { id:"R-441", firstName:"Marie",   lastName:"Lefebvre", title:"Ingénieure I&C Senior",          availability:"2024-03-15", tjm:720, location:"Aix-en-Provence", skills:["TELEPERM XS","I&C","Sûreté nucléaire","Qualification matériels"], experience:9,  phone:"+33601020304", email:"m.lefebvre@mail.com" },
+  { id:"R-312", firstName:"Thomas",  lastName:"Bernard",  title:"Expert Contrôle-commande",        availability:"2024-04-01", tjm:690, location:"Marseille",       skills:["Contrôle-commande","VD3","Sûreté nucléaire","I&C"],              experience:12, phone:"+33607080910", email:"t.bernard@mail.com"  },
+  { id:"R-557", firstName:"Sophie",  lastName:"Martin",   title:"Ingénieure Sûreté & I&C",         availability:"2024-03-20", tjm:710, location:"Toulon",          skills:["Sûreté nucléaire","I&C","TELEPERM XS","Rédaction dossiers"],    experience:7,  phone:"+33611223344", email:"s.martin@mail.com"   },
+  { id:"R-228", firstName:"Julien",  lastName:"Roux",     title:"Consultant Systèmes Nucléaires",  availability:"2024-05-01", tjm:650, location:"Nice",            skills:["I&C","Contrôle-commande","Qualification"],                      experience:5,  phone:"+33655443322", email:"j.roux@mail.com"     },
+];
+
+// ═══════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════
+function initials(c){ return (c.firstName[0]+c.lastName[0]).toUpperCase(); }
+
+function matchScore(candidate, need){
+  if(!need.skills||!need.skills.length) return 0;
+  const matched = candidate.skills.filter(s =>
+    need.skills.some(ns => ns.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(ns.toLowerCase()))
+  );
+  return Math.round(matched.length / need.skills.length * 100);
+}
+
+function escHtml(str){ return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// JWT Boond — format validé (BoondAI / ClaudeBoost)
+// header: {alg:"HS256", type:"JWT"} base64 avec padding
+// payload: {userToken, clientToken, time, mode:"normal"} base64 avec padding
+// signature: HMAC-SHA256(clientKey) base64 avec padding
+// header HTTP: X-Jwt-Client-Boondmanager
+async function buildJWT(userToken, clientToken, clientKey){
+  const header  = btoa(JSON.stringify({ alg:"HS256", type:"JWT" }));
+  const payload = btoa(JSON.stringify({ userToken, clientToken, time: Math.floor(Date.now()/1000), mode:"normal" }));
+  const data    = header + "." + payload;
+  const keyBytes  = new TextEncoder().encode(clientKey);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name:"HMAC", hash:"SHA-256" }, false, ["sign"]);
+  const sig    = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(data));
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return data + "." + sigB64;
+}
+
+async function boondGet(path, userToken, clientToken, clientKey){
+  const jwt = await buildJWT(userToken, clientToken, clientKey);
+  const res = await fetch(`https://api.boondmanager.com/api${path}`, {
+    headers:{ "Content-Type":"application/json", "X-Jwt-Client-Boondmanager": jwt }
+  });
+  if(!res.ok){ const err = await res.text(); throw new Error(`Boond API ${res.status}: ${err}`); }
+  return res.json();
+}
+
+function normalizeNeed(raw){
+  const attr = raw.attributes || raw;
+  return {
+    id:          raw.id || attr.reference || "—",
+    title:       attr.title || attr.name || "Sans titre",
+    client:      (attr.customer&&attr.customer.name) || attr.clientName || (attr.account&&attr.account.name) || "—",
+    startDate:   attr.startDate || attr.start_date || "—",
+    endDate:     attr.endDate   || attr.end_date   || "—",
+    duration:    attr.duration  || "—",
+    location:    attr.location  || attr.city       || "—",
+    tjm:         attr.averageDailyRate
+                   ? `${attr.averageDailyRate.min||'?'}–${attr.averageDailyRate.max||'?'}`
+                   : (attr.tjm || "—"),
+    skills:      Array.isArray(attr.skills)
+                   ? attr.skills.map(s => typeof s==='string'?s:(s.name||s.label||''))
+                   : [],
+    description: attr.description || attr.comment || "",
+    manager:{
+      name:  (attr.manager&&attr.manager.name)  || (attr.contact&&attr.contact.name)  || "—",
+      email: (attr.manager&&attr.manager.email) || (attr.contact&&attr.contact.email) || "—",
+      phone: (attr.manager&&attr.manager.phone) || (attr.contact&&attr.contact.phone) || "—",
+    },
+    status:   attr.state || attr.status || "active",
+    priority: attr.priority || "medium",
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER ENGINE
+// ═══════════════════════════════════════════════════════
+function render(){
+  renderStepBar();
+  const screen = document.getElementById('screen');
+  switch(state.step){
+    case 0: screen.innerHTML = renderLogin();    bindLogin();    break;
+    case 1: screen.innerHTML = renderSelector(); bindSelector(); break;
+    case 2: screen.innerHTML = renderMatching(); startMatching();break;
+    case 3: screen.innerHTML = renderValidation();bindValidation();break;
+    case 4: screen.innerHTML = renderWhatsApp(); startWhatsApp();break;
+  }
+}
+
+// ── STEPBAR ──
+function renderStepBar(){
+  const steps = ["Connexion","Besoin","Matching IA","Validation","WhatsApp"];
+  const cur = state.step;
+  let html = '<div class="stepbar">';
+  steps.forEach((s,i)=>{
+    const cstatus = i<cur?'done':i===cur?'active':'pending';
+    html += `<div class="step-item">
+      <div class="step-circle ${cstatus}">${i<cur?'✓':i+1}</div>
+      <span class="step-label ${cstatus}">${s}</span>
+    </div>`;
+    if(i<steps.length-1) html += `<div class="step-line ${i<cur?'done':'pending'}"></div>`;
+  });
+  html += '</div>';
+  document.getElementById('stepbar').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP 0 — LOGIN
+// ═══════════════════════════════════════════════════════
+function renderLogin(){
+  return `
+  <div class="card">
+    <div class="label" style="color:#f59e0b;font-weight:700;font-size:12px;margin-bottom:20px">🔐 Connexion BoondManager API</div>
+    <div class="mb16">
+      <label class="label">User Token</label>
+      <input type="password" id="inp-ut" placeholder="Votre userToken Boond" />
+    </div>
+    <div class="mb16">
+      <label class="label">Client Token</label>
+      <input type="password" id="inp-ct" placeholder="Votre clientToken Boond" />
+    </div>
+    <div class="mb16">
+      <label class="label">Client Key (clé de signature)</label>
+      <input type="password" id="inp-ck" placeholder="Votre clientKey Boond" />
+    </div>
+    <div id="mock-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:20px">
+      <div class="checkbox" id="mock-cb"></div>
+      <span style="font-size:13px;color:#94a3b8">Utiliser les données de démonstration (sans connexion Boond)</span>
+    </div>
+    <div id="login-error" class="error-box" style="display:none"></div>
+    <button class="btn btn-amber" id="btn-connect">🔌 Se connecter à BoondManager</button>
+  </div>
+  <div class="info-box">
+    <div style="color:#334155;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">ℹ️ Comment obtenir vos tokens</div>
+    Dans BoondManager : <span style="color:#64748b">Paramètres → API → Tokens d'accès</span><br/>
+    Les tokens sont utilisés uniquement en mémoire et ne sont jamais stockés.
+  </div>`;
+}
+
+function bindLogin(){
+  let useMock = false;
+  const cb = document.getElementById('mock-cb');
+  const row = document.getElementById('mock-row');
+  const ut  = document.getElementById('inp-ut');
+  const ct  = document.getElementById('inp-ct');
+  const ck  = document.getElementById('inp-ck');
+  const btn = document.getElementById('btn-connect');
+  const err = document.getElementById('login-error');
+
+  row.addEventListener('click', ()=>{
+    useMock = !useMock;
+    cb.classList.toggle('checked', useMock);
+    ut.disabled = useMock; ct.disabled = useMock; ck.disabled = useMock;
+    ut.style.opacity = useMock?'0.4':'1';
+    ct.style.opacity = useMock?'0.4':'1';
+    ck.style.opacity = useMock?'0.4':'1';
+    btn.textContent = useMock ? 'Continuer en mode démo →' : '🔌 Se connecter à BoondManager';
+  });
+
+  btn.addEventListener('click', async ()=>{
+    if(useMock){
+      state.isMock=true; state.userToken=null; state.clientToken=null;
+      state.step=1; render(); return;
+    }
+    if(!ut.value||!ct.value||!ck.value){ err.textContent='Renseigne les trois champs (userToken, clientToken, clientKey).'; err.style.display='block'; return; }
+    btn.textContent='Connexion en cours…'; btn.disabled=true; btn.className='btn btn-disabled';
+    try{
+      await boondGet('/needs?page=1&maxResults=1', ut.value, ct.value, ck.value);
+      state.userToken=ut.value; state.clientToken=ct.value; state.clientKey=ck.value; state.isMock=false;
+      state.step=1; render();
+    }catch(e){
+      err.textContent=`Connexion échouée : ${e.message}`; err.style.display='block';
+      btn.textContent='🔌 Se connecter à BoondManager'; btn.disabled=false; btn.className='btn btn-amber';
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP 1 — SÉLECTION BESOIN
+// ═══════════════════════════════════════════════════════
+function renderSelector(){
+  return `
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="inp-search" placeholder="Rechercher un besoin…" value="${escHtml(state.search)}" />
+  </div>
+  <div id="needs-count" class="label mb12"></div>
+  <div id="needs-list"></div>
+  <button class="btn ${state.selectedNeedId?'btn-amber':'btn-disabled'}" id="btn-analyze" ${state.selectedNeedId?'':'disabled'}>
+    ⚡ Analyser ce besoin avec l'IA
+  </button>`;
+}
+
+async function bindSelector(){
+  // Load needs
+  const listEl  = document.getElementById('needs-list');
+  const countEl = document.getElementById('needs-count');
+  const btnEl   = document.getElementById('btn-analyze');
+  const searchEl= document.getElementById('inp-search');
+
+  listEl.innerHTML = `<div style="text-align:center;padding:60px 0;color:#475569">
+    <div class="anim-spin" style="font-size:28px;margin-bottom:12px">⚙️</div>
+    <div style="font-size:13px">Chargement des besoins BoondManager…</div>
+  </div>`;
+
+  try{
+    if(state.isMock){
+      await new Promise(r=>setTimeout(r,600));
+      state.needs = MOCK_NEEDS;
+    }else{
+      const data = await boondGet('/needs?state=1&maxResults=50', state.userToken, state.clientToken, state.clientKey);
+      const items = data.data || data.needs || data || [];
+      state.needs = items.map(normalizeNeed);
+    }
+  }catch(e){
+    listEl.innerHTML=`<div class="error-box"><b>Erreur API</b><br>${escHtml(e.message)}<br><small style="color:#f87171">Vérifiez vos tokens ou activez le mode démo.</small></div>`;
+    return;
+  }
+
+  function renderList(){
+    const q = state.search.toLowerCase();
+    const filtered = state.needs.filter(n => `${n.title} ${n.client} ${n.id}`.toLowerCase().includes(q));
+    countEl.textContent = `${filtered.length} besoin${filtered.length>1?'s':''} ${state.isMock?'(données démo)':'depuis BoondManager'}`;
+
+    listEl.innerHTML = filtered.map(need=>{
+      const isSel = state.selectedNeedId===need.id;
+      const isExp = state.expandedNeedId===need.id;
+      return `
+      <div class="need-item ${isSel?'selected':''}" data-id="${escHtml(need.id)}">
+        <div class="need-header" data-id="${escHtml(need.id)}">
+          <div class="checkbox ${isSel?'checked':''}" style="margin-top:4px">${isSel?'✓':''}</div>
+          <div class="flex-1">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:14px;font-weight:700;color:#f1f5f9">${escHtml(need.title)}</span>
+              <span class="priority-badge priority-${need.priority}">${need.priority}</span>
+            </div>
+            <div style="display:flex;gap:10px;font-size:12px;color:#64748b;flex-wrap:wrap">
+              <span style="color:#f59e0b">${escHtml(need.client)}</span>
+              <span>·</span><span>${escHtml(need.location)}</span>
+              <span>·</span><span>${escHtml(need.startDate)}</span>
+            </div>
+          </div>
+          <span style="font-size:11px;color:#475569;flex-shrink:0">${isExp?'▲':'▼'}</span>
+        </div>
+        ${isExp?`
+        <div class="need-body">
+          <div class="grid-3 mb12">
+            ${[['Réf',need.id],['TJM',need.tjm?need.tjm+'€/j':'—'],['Durée',need.duration],['Début',need.startDate],['Fin',need.endDate],['Manager',need.manager.name]].map(([l,v])=>`
+            <div class="mini-card"><div class="mini-label">${l}</div><div class="mini-val">${escHtml(v||'—')}</div></div>`).join('')}
+          </div>
+          ${need.skills.length?`<div class="mb12"><div class="label">Compétences</div><div class="tags-row">${need.skills.map(s=>`<span class="tag">${escHtml(s)}</span>`).join('')}</div></div>`:''}
+          ${need.description?`<div style="font-size:12px;color:#64748b;line-height:1.7">${escHtml(need.description)}</div>`:''}
+        </div>`:''}
+      </div>`;
+    }).join('');
+
+    // Bind clicks
+    listEl.querySelectorAll('.need-header').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const id = el.dataset.id;
+        state.selectedNeedId = id;
+        state.expandedNeedId = state.expandedNeedId===id ? null : id;
+        renderList();
+        // Update analyze btn
+        btnEl.disabled=false; btnEl.className='btn btn-amber';
+      });
+    });
+  }
+
+  renderList();
+
+  searchEl.addEventListener('input',()=>{ state.search=searchEl.value; renderList(); });
+
+  btnEl.addEventListener('click',()=>{
+    if(!state.selectedNeedId) return;
+    state.need = state.needs.find(n=>n.id===state.selectedNeedId);
+    state.step=2; render();
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP 2 — MATCHING IA
+// ═══════════════════════════════════════════════════════
+function renderMatching(){
+  const need = state.need;
+  const cands = MOCK_CANDIDATES;
+  return `
+  <div class="card-dark mb16">
+    <div class="label mb12">Besoin sélectionné — ${escHtml(need.id)}</div>
+    <div style="font-size:16px;font-weight:800;color:#f8fafc;margin-bottom:4px">${escHtml(need.title)}</div>
+    <div style="font-size:13px;color:#f59e0b">${escHtml(need.client)} · ${escHtml(need.location)}</div>
+  </div>
+  <div class="label mb12">${cands.length} profils analysés</div>
+  <div id="cand-list" class="mb20">
+    ${cands.map((c,i)=>`
+    <div id="cand-${escHtml(c.id)}" style="background:#1e293b;border:1px solid #1e293b;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:8px;opacity:0.4;transition:all 0.3s">
+      <div class="avatar avatar-gray">${initials(c)}</div>
+      <div class="flex-1">
+        <div style="font-size:13px;color:#f1f5f9;font-weight:700">${escHtml(c.firstName)} ${escHtml(c.lastName)}</div>
+        <div style="font-size:11px;color:#64748b">${escHtml(c.title)} · ${c.tjm}€/j</div>
+      </div>
+      <div id="score-${escHtml(c.id)}" style="font-size:16px;font-weight:900;color:#334155">—</div>
+    </div>`).join('')}
+  </div>
+  <div id="stream-box">
+    <div class="stream-header">
+      <span class="stream-dot anim-pulse"></span>
+      Analyse Claude AI
+    </div>
+    <div id="stream-text" style="color:#475569;font-size:13px;font-style:italic">Analyse des profils en cours…</div>
+  </div>
+  <button class="btn btn-disabled" id="btn-next-match" disabled>Soumettre au responsable →</button>`;
+}
+
+async function startMatching(){
+  const need  = state.need;
+  const scored = MOCK_CANDIDATES
+    .map(c=>({...c, score: matchScore(c, need)}))
+    .sort((a,b)=>b.score-a.score);
+  state.scored = scored;
+
+  // Animate scores
+  scored.forEach((c,i)=>{
+    const row   = document.getElementById(`cand-${c.id}`);
+    const scEl  = document.getElementById(`score-${c.id}`);
+    if(!row||!scEl) return;
+    setTimeout(()=>{
+      row.style.opacity='1';
+      const avatarEl = row.querySelector('.avatar');
+      if(i===0){ avatarEl.className='avatar avatar-amber'; }
+      else if(i===1){ avatarEl.className='avatar avatar-blue'; }
+      else { avatarEl.className='avatar avatar-gray'; }
+      if(i===0){ row.style.background='linear-gradient(135deg,#1e3a5f22,#1e293b)'; row.style.borderColor='#3b82f644'; }
+      const scoreClass = c.score>=80?'score-high':c.score>=60?'score-mid':'score-low';
+      scEl.textContent = c.score+'%';
+      scEl.className = scoreClass;
+      if(i===0){
+        const nameEl = row.querySelector('div[style*="font-weight:700"]');
+        if(nameEl) nameEl.innerHTML += ' <span style="font-size:9px;background:#f59e0b;color:#000;border-radius:3px;padding:2px 6px;font-weight:800;vertical-align:middle">TOP</span>';
+      }
+    }, i*200);
+  });
+
+  // Stream analysis
+  const prompt = `Tu es un expert en recrutement pour le secteur nucléaire et ingénierie.
+
+BESOIN:
+- Titre: ${need.title}
+- Client: ${need.client}
+- Compétences requises: ${(need.skills||[]).join(', ')||'non précisées'}
+- TJM cible: ${need.tjm}€/j
+- Localisation: ${need.location}
+- Description: ${need.description}
+
+CANDIDATS (triés par score):
+${scored.map((c,i)=>`${i+1}. ${c.firstName} ${c.lastName} (Score: ${c.score}%) - ${c.title} - ${c.experience} ans - TJM: ${c.tjm}€ - ${c.location} - Compétences: ${c.skills.join(', ')}`).join('\n')}
+
+Fournis une analyse concise (3-4 paragraphes) :
+1. Le ou les candidats recommandés en priorité et pourquoi
+2. Points forts et points d'attention par candidat retenu
+3. Recommandation actionnable pour le manager
+
+Sois direct, professionnel, précis.`;
+
+  const streamEl = document.getElementById('stream-text');
+  const dotEl    = document.querySelector('.stream-dot');
+  const btnNext  = document.getElementById('btn-next-match');
+
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, stream:true,
+        messages:[{role:'user',content:prompt}] })
+    });
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+
+    while(true){
+      const {done,value} = await reader.read();
+      if(done) break;
+      const lines = decoder.decode(value).split('\n').filter(l=>l.startsWith('data: '));
+      for(const line of lines){
+        try{
+          const data = JSON.parse(line.slice(6));
+          if(data.type==='content_block_delta'&&data.delta?.text){
+            full+=data.delta.text;
+            streamEl.style.color='#cbd5e1'; streamEl.style.fontStyle='normal';
+            streamEl.textContent = full + '▌';
+          }
+        }catch{}
+      }
+    }
+    streamEl.textContent = full;
+    if(dotEl){ dotEl.style.background='#22c55e'; dotEl.style.boxShadow='none'; dotEl.classList.remove('anim-pulse'); }
+    btnNext.disabled=false; btnNext.className='btn btn-blue';
+    btnNext.addEventListener('click',()=>{ state.step=3; render(); });
+
+  }catch(e){
+    streamEl.style.color='#ef4444';
+    streamEl.textContent = 'Erreur d\'analyse. Vérifiez votre clé API Claude.';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP 3 — VALIDATION MANAGER
+// ═══════════════════════════════════════════════════════
+function renderValidation(){
+  const need   = state.need;
+  const scored = state.scored;
+  const selIds = state.selectedCandidates;
+
+  function buildMsg(){
+    const sel = scored.filter(c=>selIds.includes(c.id));
+    return `Bonjour,\n\nSuite au besoin « ${need.title} » (${need.id}) pour ${need.client}, voici les candidats identifiés :\n\n${sel.map(c=>`• ${c.firstName} ${c.lastName} – ${c.title} (${c.score}% match, ${c.tjm}€/j, dispo ${c.availability})`).join('\n')}\n\nMerci de confirmer votre accord pour les contacter.\n\nCordialement,\n${need.manager.name}`;
+  }
+
+  return `
+  <div class="card-dark mb16">
+    <div class="label mb12">Sélectionner les candidats à proposer</div>
+    ${scored.map(c=>`
+    <div class="candidate-row ${selIds.includes(c.id)?'selected':''}" data-id="${escHtml(c.id)}">
+      <div class="checkbox ${selIds.includes(c.id)?'checked':''}">${selIds.includes(c.id)?'✓':''}</div>
+      <div class="avatar ${selIds.includes(c.id)?'avatar-blue':'avatar-gray'}">${initials(c)}</div>
+      <div class="flex-1">
+        <div style="font-size:13px;color:#f1f5f9;font-weight:600">${escHtml(c.firstName)} ${escHtml(c.lastName)}</div>
+        <div style="font-size:11px;color:#64748b">${escHtml(c.title)} · ${c.tjm}€/j</div>
+      </div>
+      <div class="score-${c.score>=80?'high':c.score>=60?'mid':'low'}" style="font-size:16px;font-weight:900">${c.score}%</div>
+    </div>`).join('')}
+  </div>
+  <textarea id="msg-preview" rows="9" readonly>${escHtml(buildMsg())}</textarea>
+  <div style="margin-top:14px">
+    <button class="btn ${selIds.length?'btn-green':'btn-disabled'}" id="btn-validate" ${selIds.length?'':'disabled'}>
+      ✅ Valider — Préparer WhatsApp (${selIds.length} candidat${selIds.length>1?'s':''})
+    </button>
+  </div>`;
+}
+
+function bindValidation(){
+  function refresh(){ document.getElementById('screen').innerHTML = renderValidation(); bindValidation(); }
+
+  document.querySelectorAll('.candidate-row').forEach(row=>{
+    row.addEventListener('click',()=>{
+      const id = row.dataset.id;
+      if(state.selectedCandidates.includes(id)){
+        state.selectedCandidates = state.selectedCandidates.filter(x=>x!==id);
+      }else{
+        state.selectedCandidates = [...state.selectedCandidates, id];
+      }
+      refresh();
+    });
+  });
+
+  const btn = document.getElementById('btn-validate');
+  if(btn&&!btn.disabled){
+    btn.addEventListener('click',()=>{
+      state.validated = state.scored.filter(c=>state.selectedCandidates.includes(c.id));
+      state.step=4; render();
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP 4 — WHATSAPP
+// ═══════════════════════════════════════════════════════
+function renderWhatsApp(){
+  const cands = state.validated;
+  return `
+  <div style="background:linear-gradient(135deg,#052e16,#14532d);border:1px solid #16a34a44;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
+    <span style="font-size:22px">✅</span>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#4ade80">Accord manager confirmé</div>
+      <div style="font-size:12px;color:#86efac">${cands.length} candidat${cands.length>1?'s':''} à contacter</div>
+    </div>
+  </div>
+  ${cands.map(c=>`
+  <div class="wa-card ${state.waSent[c.id]?'sent':''}" id="wa-${escHtml(c.id)}">
+    <div class="flex-row mb12">
+      <div class="avatar avatar-green" style="width:40px;height:40px;font-size:14px">${initials(c)}</div>
+      <div class="flex-1">
+        <div style="font-size:14px;font-weight:700;color:#f1f5f9">${escHtml(c.firstName)} ${escHtml(c.lastName)}</div>
+        <div style="font-size:11px;color:#64748b">${escHtml(c.phone)}</div>
+      </div>
+      ${state.waSent[c.id]?'<span style="font-size:10px;background:#052e16;color:#4ade80;border:1px solid #16a34a;border-radius:5px;padding:3px 9px;font-weight:700">ENVOYÉ</span>':''}
+    </div>
+    <div style="background:#0f172a;border-radius:9px;padding:12px 14px;margin-bottom:12px;min-height:70px">
+      <div id="msg-${escHtml(c.id)}" style="font-size:12px;color:${state.waGenerating[c.id]?'#475569':'#cbd5e1'};line-height:1.8;white-space:pre-wrap;font-style:${state.waGenerating[c.id]?'italic':'normal'}">
+        ${state.waGenerating[c.id]?'Génération du message…':(state.waMessages[c.id]?escHtml(state.waMessages[c.id]):'')}
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-ghost btn-regen" data-id="${escHtml(c.id)}" ${state.waGenerating[c.id]?'disabled':''}>🔄 Régénérer</button>
+      <button class="btn-send ${state.waMessages[c.id]&&!state.waGenerating[c.id]?'btn-wa':'btn-disabled'}" data-id="${escHtml(c.id)}" data-phone="${escHtml(c.phone)}" ${state.waMessages[c.id]&&!state.waGenerating[c.id]?'':'disabled'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.132.558 4.13 1.533 5.862L0 24l6.302-1.513A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.667-.492-5.21-1.353l-.374-.214-3.742.897.952-3.642-.234-.381A9.934 9.934 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+        Ouvrir WhatsApp
+      </button>
+    </div>
+  </div>`).join('')}`;
+}
+
+async function genWaMessage(c){
+  const need = state.need;
+  state.waGenerating[c.id] = true;
+  refreshWaCard(c);
+
+  const prompt = `Rédige un message WhatsApp professionnel et personnalisé pour contacter ce consultant.
+
+Consultant: ${c.firstName} ${c.lastName}, ${c.title}
+Mission: ${need.title} pour ${need.client}
+Lieu: ${need.location} | Durée: ${need.duration} | Démarrage: ${need.startDate} | TJM: ${need.tjm}€/j
+
+Le message doit être: court (5-7 lignes), chaleureux et direct, mentionner que leur profil correspond bien, se terminer par une question sur leur disponibilité, commencer par "Bonjour ${c.firstName},", signé "NABBOO Conseil". Max 2 émojis.`;
+
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:300, messages:[{role:'user',content:prompt}] })
+    });
+    const data = await res.json();
+    state.waMessages[c.id] = data.content?.[0]?.text || 'Erreur de génération.';
+  }catch{
+    state.waMessages[c.id] = 'Erreur lors de la génération.';
+  }
+  state.waGenerating[c.id] = false;
+  refreshWaCard(c);
+}
+
+function refreshWaCard(c){
+  const card = document.getElementById(`wa-${c.id}`);
+  if(!card) return;
+  const msgEl  = card.querySelector(`#msg-${c.id}`);
+  const regenBtn = card.querySelector('.btn-regen');
+  const sendBtn  = card.querySelector('.btn-send');
+  if(msgEl){
+    if(state.waGenerating[c.id]){
+      msgEl.style.color='#475569'; msgEl.style.fontStyle='italic'; msgEl.textContent='Génération du message…';
+    }else{
+      msgEl.style.color='#cbd5e1'; msgEl.style.fontStyle='normal';
+      msgEl.textContent = state.waMessages[c.id]||'';
+    }
+  }
+  if(regenBtn) regenBtn.disabled = !!state.waGenerating[c.id];
+  if(sendBtn){
+    const canSend = state.waMessages[c.id]&&!state.waGenerating[c.id];
+    sendBtn.disabled = !canSend;
+    sendBtn.className = `btn-send ${canSend?'btn-wa':'btn-disabled'}`;
+  }
+}
+
+function startWhatsApp(){
+  // Generate all messages
+  state.validated.forEach(c=>{ if(!state.waMessages[c.id]) genWaMessage(c); });
+
+  // Bind events (delegation)
+  document.getElementById('screen').addEventListener('click',e=>{
+    const regenBtn = e.target.closest('.btn-regen');
+    const sendBtn  = e.target.closest('.btn-send');
+    if(regenBtn){
+      const id = regenBtn.dataset.id;
+      const c  = state.validated.find(x=>x.id===id);
+      if(c) genWaMessage(c);
+    }
+    if(sendBtn&&!sendBtn.disabled){
+      const id  = sendBtn.dataset.id;
+      const phone = sendBtn.dataset.phone;
+      const msg = state.waMessages[id]||'';
+      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
+      state.waSent[id]=true;
+      // Update badge
+      const card = document.getElementById(`wa-${id}`);
+      if(card) card.classList.add('sent');
+      const header = card&&card.querySelector('.flex-row');
+      if(header&&!header.querySelector('.sent-badge')){
+        const badge = document.createElement('span');
+        badge.className='sent-badge';
+        badge.style.cssText='font-size:10px;background:#052e16;color:#4ade80;border:1px solid #16a34a;border-radius:5px;padding:3px 9px;font-weight:700';
+        badge.textContent='ENVOYÉ';
+        header.appendChild(badge);
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════
+render();
+</script>
+</body>
+</html>
