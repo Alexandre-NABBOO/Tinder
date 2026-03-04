@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.6</div>
+<div id="version-badge">v2.8</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -539,16 +539,16 @@ async function bindSelector(){
 // ═══════════════════════════════════════════════════════
 function renderMatching(){
   const need = state.need;
-  const cands = MOCK_CANDIDATES;
+  const cands = state.scored.length > 0 ? state.scored : MOCK_CANDIDATES;
   return `
   <div class="card-dark mb16">
     <div class="label mb12">Besoin sélectionné — ${escHtml(need.id)}</div>
     <div style="font-size:16px;font-weight:800;color:#f8fafc;margin-bottom:4px">${escHtml(need.title)}</div>
     <div style="font-size:13px;color:#f59e0b">${escHtml(need.client)} · ${escHtml(need.location)}</div>
   </div>
-  <div class="label mb12">${cands.length} profils analysés</div>
+  <div class="label mb12" id="cands-count">Chargement des ressources…</div>
   <div id="cand-list" class="mb20">
-    ${cands.map((c,i)=>`
+    ${(state.scored.length > 0 ? state.scored : MOCK_CANDIDATES).map((c,i)=>`
     <div id="cand-${escHtml(c.id)}" style="background:#1e293b;border:1px solid #1e293b;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:8px;opacity:0.4;transition:all 0.3s">
       <div class="avatar avatar-gray">${initials(c)}</div>
       <div class="flex-1">
@@ -570,12 +570,89 @@ function renderMatching(){
 
 async function startMatching(){
   const need  = state.need;
-  const scored = MOCK_CANDIDATES
-    .map(c=>({...c, score: matchScore(c, need)}))
-    .sort((a,b)=>b.score-a.score);
+  const streamEl = document.getElementById('stream-text');
+  const dotEl    = document.querySelector('.stream-dot');
+  const btnNext  = document.getElementById('btn-next-match');
+
+  // Charger le détail du besoin
+  let needDetail = need;
+  try {
+    if(!state.isMock){
+      streamEl.style.color='#f59e0b'; streamEl.textContent='Chargement du détail du besoin…';
+      const detailData = await boondGet(`/opportunities/${need.id}`, state.userToken, state.clientToken, state.clientKey);
+      const d = detailData.data || detailData;
+      needDetail = normalizeNeed(d);
+      needDetail.id = need.id;
+    }
+  } catch(e){ console.warn('Detail besoin:', e.message); }
+
+  // Charger les ressources Boond
+  let candidates = MOCK_CANDIDATES;
+  try {
+    if(!state.isMock){
+      streamEl.style.color='#f59e0b'; streamEl.textContent='Chargement de 30 ressources Boond…';
+      const resData = await boondGet('/resources?maxResults=30&state=1', state.userToken, state.clientToken, state.clientKey);
+      const items = (resData.data || resData.resources || []).slice(0, 30);
+      if(items.length > 0){
+        // Charger détails en parallèle (commentaires + références)
+        streamEl.textContent = `Chargement des détails (${items.length} profils en parallèle)…`;
+        const details = await Promise.allSettled(
+          items.map(r => boondGet(`/resources/${r.id}`, state.userToken, state.clientToken, state.clientKey))
+        );
+
+        candidates = items.map((r, i) => {
+          const a = r.attributes || r;
+          const skills = [];
+          if(a.tools) String(a.tools).split('|').forEach(t=>{ const s=t.split('#')[0].trim(); if(s) skills.push(s); });
+
+          // Récupérer commentaires et références depuis le détail
+          let commentaire = '';
+          let references = [];
+          if(details[i].status === 'fulfilled'){
+            const det = details[i].value;
+            const da = (det.data && det.data.attributes) || det.attributes || det.data || {};
+            commentaire = da.information?.comments || da.comments || da.comment || da.paramCommentaire || '';
+            // Références/expériences
+            const refs = det.data?.relationships?.experiences?.data || det.included?.filter(x=>x.type==='experience') || [];
+            references = refs.map(ref => {
+              const ra = ref.attributes || ref;
+              return `${ra.title||ra.position||''} (${ra.startDate||ra.debut||''} - ${ra.endDate||ra.fin||'en cours'}) : ${ra.description||ra.mission||''}`.trim();
+            }).filter(Boolean).slice(0, 5).join(' | ');
+          }
+
+          return {
+            id:           r.id || a.id,
+            firstName:    a.firstName || (a.name||'').split(' ')[0] || '?',
+            lastName:     a.lastName  || (a.name||'').split(' ').slice(1).join(' ') || '?',
+            title:        a.title || a.status || '—',
+            availability: a.availabilityDate || '—',
+            tjm:          a.averageDailyRate || 0,
+            location:     a.city || a.location || '—',
+            skills:       skills,
+            experience:   a.experience || 0,
+            phone:        a.phone1 || '',
+            email:        a.email  || '',
+            commentaire:  commentaire,
+            references:   references,
+          };
+        });
+        streamEl.textContent = `${candidates.length} ressources chargées avec détails ✓`;
+      }
+    }
+  } catch(e){ console.warn('Ressources:', e.message); candidates = MOCK_CANDIDATES; }
+
+  const scored = candidates
+    .map(c=>({...c, score: matchScore(c, needDetail)}))
+    .sort((a,b)=>b.score-a.score)
+    .slice(0, 20); // Top 20
   state.scored = scored;
+  state.need = needDetail;
 
   // Animate scores
+  // Mettre à jour le compteur
+  const countEl = document.getElementById('cands-count');
+  if(countEl) countEl.textContent = `${scored.length} ressources analysées${state.isMock?' (données démo)':' depuis Boond'}`;
+
   scored.forEach((c,i)=>{
     const row   = document.getElementById(`cand-${c.id}`);
     const scEl  = document.getElementById(`score-${c.id}`);
@@ -609,7 +686,10 @@ BESOIN:
 - Description: ${need.description}
 
 CANDIDATS (triés par score):
-${scored.map((c,i)=>`${i+1}. ${c.firstName} ${c.lastName} (Score: ${c.score}%) - ${c.title} - ${c.experience} ans - TJM: ${c.tjm}€ - ${c.location} - Compétences: ${c.skills.join(', ')}`).join('\n')}
+${scored.map((c,i)=>`${i+1}. ${c.firstName} ${c.lastName} (Score: ${c.score}%) - ${c.title} - TJM: ${c.tjm}€ - ${c.location}
+   Compétences: ${c.skills.join(', ')||'non renseignées'}
+   ${c.commentaire?'Commentaire: '+c.commentaire.slice(0,300):''}
+   ${c.references?'Références: '+c.references.slice(0,400):''}`).join('\n---\n')}
 
 Fournis une analyse concise (3-4 paragraphes) :
 1. Le ou les candidats recommandés en priorité et pourquoi
@@ -617,10 +697,6 @@ Fournis une analyse concise (3-4 paragraphes) :
 3. Recommandation actionnable pour le manager
 
 Sois direct, professionnel, précis.`;
-
-  const streamEl = document.getElementById('stream-text');
-  const dotEl    = document.querySelector('.stream-dot');
-  const btnNext  = document.getElementById('btn-next-match');
 
   try{
     const res = await fetch('https://api.anthropic.com/v1/messages',{
