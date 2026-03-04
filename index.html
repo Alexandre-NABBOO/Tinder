@@ -282,8 +282,9 @@ async function boondGet(path, userToken, clientToken, clientKey){
 
 function normalizeNeed(raw){
   // TAB_AO: Appel d'offres / Opportunité Boond
-  const attr = raw.attributes || raw;
-  const rels  = raw.relationships || {};
+  const attr     = raw.attributes || raw;
+  const rels     = raw.relationships || {};
+  const included = raw.included || [];
 
   // Compétences: AO_OUTILS format "tool1|level#tool2|level"
   let skills = [];
@@ -291,14 +292,30 @@ function normalizeNeed(raw){
     skills = String(attr.tools).split('|').map(s=>s.split('#')[0].trim()).filter(Boolean);
   }
 
-  // TJM depuis AO_TAUXHORAIRE
+  // TJM
   const tjm = attr.averageDailyRate || attr.dailyRate || (attr.tauxHoraire ? attr.tauxHoraire+'€/j' : null) || "—";
 
-  // Manager depuis relationships
-  const managerData = rels.mainManager?.data || rels.manager?.data || {};
-  const managerName = attr.managerName || (managerData.firstName&&managerData.lastName ? `${managerData.firstName} ${managerData.lastName}` : null) || "—";
+  // Resp Manager du besoin = mainManager dans relationships
+  const managerRel  = rels.mainManager || rels.manager || {};
+  const managerRef  = managerRel.data || {};
+  const managerId   = managerRef.id || attr.mainManagerId || attr.managerId || null;
 
-  // Client depuis relationships
+  // Résoudre le nom depuis included (JSON:API sideloading)
+  let managerFirstName = "", managerLastName = "";
+  if(managerId && included.length){
+    const inc = included.find(function(x){ return String(x.id) === String(managerId) && x.type === "resource"; });
+    if(inc){
+      const ia = inc.attributes || inc;
+      managerFirstName = ia.firstName || ia.firstname || ia.prenom || "";
+      managerLastName  = ia.lastName  || ia.lastname  || ia.nom    || "";
+    }
+  }
+  const managerName = attr.managerName
+    || (managerFirstName && managerLastName ? managerFirstName + " " + managerLastName : null)
+    || managerFirstName || managerLastName
+    || "—";
+
+  // Client
   const clientData = rels.company?.data || rels.customer?.data || {};
   const clientName = attr.companyName || clientData.name || "—";
 
@@ -313,11 +330,12 @@ function normalizeNeed(raw){
     tjm:         typeof tjm === 'number' ? tjm+'€/j' : tjm,
     skills:      skills,
     description: attr.description || attr.criteres || attr.comment || "",
-    manager:{
+    manager: {
       name:  managerName,
       email: attr.managerEmail || "—",
       phone: attr.managerPhone || "—",
     },
+    managerId: managerId,
     status:   attr.state !== undefined ? String(attr.state) : "active",
     priority: attr.priority || (attr.proba >= 70 ? "high" : attr.proba >= 40 ? "medium" : "low"),
   };
@@ -582,6 +600,8 @@ async function startMatching(){
       streamEl.style.color='#f59e0b'; streamEl.textContent='Chargement du détail du besoin…';
       const detailData = await boondGet(`/opportunities/${need.id}`, state.userToken, state.clientToken, state.clientKey);
       const d = detailData.data || detailData;
+      // Injecter included dans raw pour résoudre les noms (JSON:API sideloading)
+      if(detailData.included && d && typeof d === 'object') d.included = detailData.included;
       needDetail = normalizeNeed(d);
       needDetail.id = need.id;
     }
