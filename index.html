@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.1</div>
+<div id="version-badge">v2.3</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -208,6 +208,7 @@ const state = {
   userToken: null,
   clientToken: null,
   clientKey: null,
+  claudeKey: null,
   isMock: false,
   needs: [],
   selectedNeedId: null,
@@ -271,7 +272,7 @@ async function buildJWT(userToken, clientToken, clientKey){
 
 async function boondGet(path, userToken, clientToken, clientKey){
   const jwt = await buildJWT(userToken, clientToken, clientKey);
-  const res = await fetch(`https://api.boondmanager.com/api${path}`, {
+  const res = await fetch(`https://ui.boondmanager.com/api${path}`, {
     headers:{ "Content-Type":"application/json", "X-Jwt-Client-Boondmanager": jwt }
   });
   if(!res.ok){ const err = await res.text(); throw new Error(`Boond API ${res.status}: ${err}`); }
@@ -356,6 +357,10 @@ function renderLogin(){
       <label class="label">Client Key (clé de signature)</label>
       <input type="password" id="inp-ck" placeholder="Votre clientKey Boond" />
     </div>
+    <div class="mb16">
+      <label class="label">Clé API Claude</label>
+      <input type="password" id="inp-claude" placeholder="sk-ant-..." />
+    </div>
     <div id="mock-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:20px">
       <div class="checkbox" id="mock-cb"></div>
       <span style="font-size:13px;color:#94a3b8">Utiliser les données de démonstration (sans connexion Boond)</span>
@@ -377,16 +382,18 @@ function bindLogin(){
   const ut  = document.getElementById('inp-ut');
   const ct  = document.getElementById('inp-ct');
   const ck  = document.getElementById('inp-ck');
+  const cl  = document.getElementById('inp-claude');
   const btn = document.getElementById('btn-connect');
   const err = document.getElementById('login-error');
 
   row.addEventListener('click', ()=>{
     useMock = !useMock;
     cb.classList.toggle('checked', useMock);
-    ut.disabled = useMock; ct.disabled = useMock; ck.disabled = useMock;
+    ut.disabled = useMock; ct.disabled = useMock; ck.disabled = useMock; cl.disabled = useMock;
     ut.style.opacity = useMock?'0.4':'1';
     ct.style.opacity = useMock?'0.4':'1';
     ck.style.opacity = useMock?'0.4':'1';
+    cl.style.opacity = useMock?'0.4':'1';
     btn.textContent = useMock ? 'Continuer en mode démo →' : '🔌 Se connecter à BoondManager';
   });
 
@@ -395,11 +402,11 @@ function bindLogin(){
       state.isMock=true; state.userToken=null; state.clientToken=null;
       state.step=1; render(); return;
     }
-    if(!ut.value||!ct.value||!ck.value){ err.textContent='Renseigne les trois champs (userToken, clientToken, clientKey).'; err.style.display='block'; return; }
+    if(!ut.value||!ct.value||!ck.value||!cl.value){ err.textContent='Renseigne les 4 champs.'; err.style.display='block'; return; }
     btn.textContent='Connexion en cours…'; btn.disabled=true; btn.className='btn btn-disabled';
     try{
       await boondGet('/needs?page=1&maxResults=1', ut.value, ct.value, ck.value);
-      state.userToken=ut.value; state.clientToken=ct.value; state.clientKey=ck.value; state.isMock=false;
+      state.userToken=ut.value; state.clientToken=ct.value; state.clientKey=ck.value; state.claudeKey=cl.value; state.isMock=false;
       state.step=1; render();
     }catch(e){
       err.textContent=`Connexion échouée : ${e.message}`; err.style.display='block';
@@ -602,7 +609,7 @@ Sois direct, professionnel, précis.`;
   try{
     const res = await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':state.claudeKey},
       body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, stream:true,
         messages:[{role:'user',content:prompt}] })
     });
@@ -750,7 +757,7 @@ Le message doit être: court (5-7 lignes), chaleureux et direct, mentionner que 
   try{
     const res = await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':state.claudeKey},
       body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:300, messages:[{role:'user',content:prompt}] })
     });
     const data = await res.json();
