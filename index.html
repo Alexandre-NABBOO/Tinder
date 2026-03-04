@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.9</div>
+<div id="version-badge">v2.10</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -600,25 +600,34 @@ async function startMatching(){
       streamEl.style.color='#f59e0b'; streamEl.textContent='Chargement du détail du besoin…';
       const detailData = await boondGet(`/opportunities/${need.id}`, state.userToken, state.clientToken, state.clientKey);
       const d = detailData.data || detailData;
-      console.log("[BoondMatch] Détail besoin brut - relationships:", JSON.stringify((d.relationships||{}).mainManager||{}));
+      console.log("[BoondMatch] === DETAIL BESOIN ===");
+      console.log("[BoondMatch] relationships.mainManager:", JSON.stringify((d.relationships||{}).mainManager||{}));
+      console.log("[BoondMatch] attributes.mainManager:", JSON.stringify((d.attributes||{}).mainManager||"n/a"));
+      console.log("[BoondMatch] attributes keys:", Object.keys(d.attributes||d).join(", "));
+      console.log("[BoondMatch] included count:", (d.included||[]).length);
       // Injecter included dans raw pour résoudre les noms (JSON:API sideloading)
       if(detailData.included && d && typeof d === 'object') d.included = detailData.included;
       needDetail = normalizeNeed(d);
       needDetail.id = need.id;
 
-      // Résoudre le nom du Resp Manager si pas encore trouvé
-      if(needDetail.managerId && (needDetail.manager.name === "—" || !needDetail.manager.name)){
-        streamEl.textContent = "Chargement du responsable manager…";
+      // Résoudre le Resp Manager depuis /resources/{managerId} (toujours)
+      if(needDetail.managerId){
+        streamEl.textContent = "Identification du responsable manager…";
         try {
           const mgrData = await boondGet("/resources/" + needDetail.managerId, state.userToken, state.clientToken, state.clientKey);
-          const ma = (mgrData.data && mgrData.data.attributes) || mgrData.attributes || mgrData.data || {};
-          const fn = ma.firstName || ma.firstname || ma.prenom || "";
-          const ln = ma.lastName  || ma.lastname  || ma.nom    || "";
-          if(fn || ln) needDetail.manager.name = (fn + " " + ln).trim();
-          console.log("[BoondMatch] Manager résolu:", needDetail.manager.name, "id:", needDetail.managerId);
-        } catch(e){ console.warn("Manager fetch:", e.message); }
+          const ma = (mgrData.data && mgrData.data.attributes) || mgrData.attributes || {};
+          const fn = ma.firstName || ma.firstname || "";
+          const ln = ma.lastName  || ma.lastname  || "";
+          const fullName = (fn + " " + ln).trim();
+          if(fullName){
+            needDetail.manager.name = fullName;
+          }
+          console.log("[BoondMatch] Resp Manager:", needDetail.manager.name, "| managerId:", needDetail.managerId);
+        } catch(e){
+          console.warn("[BoondMatch] Manager fetch failed:", e.message);
+        }
       } else {
-        console.log("[BoondMatch] Manager depuis included:", needDetail.manager.name, "id:", needDetail.managerId);
+        console.warn("[BoondMatch] Pas de managerId dans ce besoin. relationships.mainManager vide ?");
       }
     }
   } catch(e){ console.warn('Detail besoin:', e.message); }
@@ -783,7 +792,7 @@ function renderValidation(){
 
   function buildMsg(){
     const sel = scored.filter(c=>selIds.includes(c.id));
-    return `Bonjour,\n\nSuite au besoin « ${need.title} » (${need.id}) pour ${need.client}, voici les candidats identifiés :\n\n${sel.map(c=>`• ${c.firstName} ${c.lastName} – ${c.title} (${c.score}% match, ${c.tjm}€/j, dispo ${c.availability})`).join('\n')}\n\nMerci de confirmer votre accord pour les contacter.\n\nCordialement,\n${need.manager.name}`;
+    return `Bonjour,\n\nSuite au besoin « ${need.title} » (${need.id}) pour ${need.client}, voici les candidats identifiés :\n\n${sel.map(c=>`• ${c.firstName} ${c.lastName} – ${c.title} (${c.score}% match, ${c.tjm}€/j, dispo ${c.availability})`).join('\n')}\n\nMerci de confirmer votre accord pour les contacter.\n\nCordialement,`;
   }
 
   return `
