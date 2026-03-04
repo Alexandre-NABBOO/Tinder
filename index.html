@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.12</div>
+<div id="version-badge">v2.14</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -819,33 +819,25 @@ function renderValidation(){
 }
 
 function bindValidation(){
-  function refresh(){ document.getElementById('screen').innerHTML = renderValidation(); bindValidation(); }
+  const need   = state.need;
+  const vs     = state.validationStatus;
+  const selIds = state.selectedCandidates;
+  const mn     = (need.manager && need.manager.name) || "";
+  const mname  = (mn && mn !== "—" && mn.trim() !== "") ? mn.trim() : null;
+  const managerLabel = mname || (need.managerId ? "Responsable (id:" + need.managerId + ")" : null);
 
-  document.querySelectorAll('.candidate-row').forEach(row=>{
-    row.addEventListener('click',()=>{
-      const id = row.dataset.id;
-      if(state.selectedCandidates.includes(id)){
-        state.selectedCandidates = state.selectedCandidates.filter(x=>x!==id);
-      }else{
-        state.selectedCandidates = [...state.selectedCandidates, id];
-      }
-      refresh();
-    });
-  });
+  function refresh(){
+    document.getElementById('screen').innerHTML = renderValidation();
+    bindValidation();
+  }
 
+  // ── 1. Injecter notif-area EN PREMIER (avant d'attacher les listeners) ──
   const notifArea = document.getElementById("notif-area");
   if(notifArea){
-    const need   = state.need;
-    const vs     = state.validationStatus;
-    const selIds = state.selectedCandidates; // lire depuis state, pas depuis renderValidation
-    const mn     = (need.manager && need.manager.name) || "";
-    const mname  = (mn && mn !== "—" && mn.trim() !== "") ? mn.trim() : null;
-    const managerLabel = mname || (need.managerId ? "Responsable (id:" + need.managerId + ")" : null);
-
     function showYesNo(pre){
       notifArea.innerHTML = pre
         + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
-        + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">Oui, valid\u00e9</button>"
+        + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">Oui, validé</button>"
         + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">Non, refus</button>"
         + "</div>";
       document.getElementById("btn-yes").addEventListener("click", function(){ state.validationStatus="approved"; refresh(); });
@@ -853,34 +845,48 @@ function bindValidation(){
     }
 
     if(vs === "pending"){
-      var canN = selIds.length > 0 && (need.managerId || mname);
-      var disAttr = canN ? "" : " disabled";
-      var disStyle = canN ? "" : " style=\"opacity:0.4\"";
-      notifArea.innerHTML = "<button class=\"btn btn-blue\" id=\"btn-notify\"" + disAttr + disStyle + ">Demander validation \u00e0 " + escHtml(mname || "le responsable") + "</button>";
-      var btnN = document.getElementById("btn-notify");
+      const canN = selIds.length > 0 && (need.managerId || mname);
+      const disAttr  = canN ? "" : " disabled";
+      const disStyle = canN ? "" : " style=\"opacity:0.4\"";
+      notifArea.innerHTML = "<button class=\"btn btn-blue\" id=\"btn-notify\"" + disAttr + disStyle + ">Demander validation à " + escHtml(managerLabel || "le responsable") + "</button>";
+      const btnN = document.getElementById("btn-notify");
       if(btnN && !btnN.disabled){
         btnN.addEventListener("click", async function(){
           btnN.disabled = true;
           btnN.textContent = "Envoi...";
-          var sel = state.scored.filter(function(c){ return state.selectedCandidates.includes(c.id); });
-          var txt = sel.map(function(c){ return "- " + c.firstName + " " + c.lastName + " (" + c.score + "%)"; }).join("\n");
-          var okN = await sendBoondNotification(need.managerId, "[BoondMatch] " + need.title, txt);
+          const sel = state.scored.filter(function(c){ return state.selectedCandidates.includes(c.id); });
+          const txt = sel.map(function(c){ return "- " + c.firstName + " " + c.lastName + " (" + c.score + "%)"; }).join("\n");
+          const okN = await sendBoondNotification(need.managerId, "[BoondMatch] " + need.title, txt);
           state.validationStatus = "notified";
-          var fc = okN ? "#22c55e" : "#f59e0b";
-          var ft = okN ? "Notification envoy\u00e9e sur Boond" : "Non envoy\u00e9e - r\u00e9pondez manuellement";
+          const fc = okN ? "#22c55e" : "#f59e0b";
+          const ft = okN ? "Notification envoyée sur Boond" : "Non envoyée - répondez manuellement";
           showYesNo("<div style=\"color:" + fc + ";font-size:12px;margin-bottom:8px\">" + ft + "</div>");
         });
       }
     } else if(vs === "notified"){
-      showYesNo("<div style=\"color:#f59e0b;font-size:12px;margin-bottom:8px\">En attente de r\u00e9ponse...</div>");
+      showYesNo("<div style=\"color:#f59e0b;font-size:12px;margin-bottom:8px\">En attente de réponse...</div>");
     } else if(vs === "approved"){
-      notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px;margin-bottom:10px\">Valid\u00e9 !</div>";
+      notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px;margin-bottom:10px\">✅ Validé !</div>";
     } else if(vs === "rejected"){
-      notifArea.innerHTML = "<div style=\"color:#ef4444;font-weight:700;font-size:13px;margin-bottom:10px\">Refus\u00e9 - modifiez la s\u00e9lection</div>";
+      notifArea.innerHTML = "<div style=\"color:#ef4444;font-weight:700;font-size:13px;margin-bottom:10px\">❌ Refusé - modifiez la sélection</div>";
     }
   }
 
-  var btn = document.getElementById("btn-validate");
+  // ── 2. Attacher les listeners des cases APRÈS (DOM stable) ──
+  document.querySelectorAll('.candidate-row').forEach(function(row){
+    row.addEventListener('click', function(){
+      const id = row.dataset.id;
+      if(state.selectedCandidates.includes(id)){
+        state.selectedCandidates = state.selectedCandidates.filter(function(x){ return x !== id; });
+      } else {
+        state.selectedCandidates = [...state.selectedCandidates, id];
+      }
+      refresh();
+    });
+  });
+
+  // ── 3. Bouton WhatsApp ──
+  const btn = document.getElementById("btn-validate");
   if(btn && !btn.disabled){
     btn.addEventListener("click", function(){
       state.validated = state.scored.filter(function(c){ return state.selectedCandidates.includes(c.id); });
@@ -1022,17 +1028,34 @@ async function sendBoondNotification(managerId, subject, message){
     const body  = JSON.stringify({
       data: {
         type: "action",
-        attributes: { title: subject, description: message, startDate: today, endDate: today, state: 1, typeOf: 1 },
-        relationships: { mainManager: { data: { id: String(managerId), type: "resource" } } }
+        attributes: {
+          title:       subject,
+          description: message,
+          startDate:   today,
+          endDate:     today,
+          state:       1,
+          typeOf:      1
+        },
+        relationships: {
+          mainManager: { data: { id: String(managerId), type: "resource" } }
+        }
       }
     });
     const res = await fetch("https://ui.boondmanager.com/api/actions", {
       method: "POST",
-      headers: { "Content-Type": "application/vnd.api+json", "X-Jwt-Client-Boondmanager": jwt },
+      headers: {
+        "Content-Type": "application/vnd.api+json",
+        "X-Jwt-Client-Boondmanager": jwt
+      },
       body: body
     });
+    const respText = await res.text();
+    console.log("[BoondMatch] Notif status:", res.status, "response:", respText.substring(0, 200));
     return res.ok;
-  } catch(e) { console.warn("Notif:", e); return false; }
+  } catch(e) {
+    console.warn("[BoondMatch] Notif error:", e.message);
+    return false;
+  }
 }
 // ═══════════════════════════════════════════════════════
 render();
