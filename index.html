@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.5</div>
+<div id="version-badge">v2.6</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -421,7 +421,7 @@ function bindLogin(){
     if(!ut.value||!ct.value||!ck.value||!cl.value){ err.textContent='Renseigne les 4 champs.'; err.style.display='block'; return; }
     btn.textContent='Connexion en cours…'; btn.disabled=true; btn.className='btn btn-disabled';
     try{
-      await boondGet('/users/current', ut.value, ct.value, ck.value);
+      await boondGet('/opportunities?maxResults=1', ut.value, ct.value, ck.value);
       state.userToken=ut.value; state.clientToken=ct.value; state.clientKey=ck.value; state.claudeKey=cl.value; state.isMock=false;
       state.step=1; render();
     }catch(e){
