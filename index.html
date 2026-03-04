@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.10</div>
+<div id="version-badge">v2.11</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -837,8 +837,10 @@ function bindValidation(){
   if(notifArea){
     const need = state.need;
     const vs   = state.validationStatus;
-    const mn   = need.manager && need.manager.name;
-    const mname = (mn && mn !== "\u2014" && mn !== "-") ? mn : null;
+    const mn    = (need.manager && need.manager.name) || "";
+    const mname = (mn && mn !== "—" && mn.trim() !== "") ? mn.trim() : null;
+    // Fallback : si managerId connu mais nom vide, afficher l'id
+    const managerLabel = mname || (need.managerId ? "Responsable (id:" + need.managerId + ")" : null);
 
     function showYesNo(pre){
       notifArea.innerHTML = pre
