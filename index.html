@@ -600,10 +600,26 @@ async function startMatching(){
       streamEl.style.color='#f59e0b'; streamEl.textContent='Chargement du détail du besoin…';
       const detailData = await boondGet(`/opportunities/${need.id}`, state.userToken, state.clientToken, state.clientKey);
       const d = detailData.data || detailData;
+      console.log("[BoondMatch] Détail besoin brut - relationships:", JSON.stringify((d.relationships||{}).mainManager||{}));
       // Injecter included dans raw pour résoudre les noms (JSON:API sideloading)
       if(detailData.included && d && typeof d === 'object') d.included = detailData.included;
       needDetail = normalizeNeed(d);
       needDetail.id = need.id;
+
+      // Résoudre le nom du Resp Manager si pas encore trouvé
+      if(needDetail.managerId && (needDetail.manager.name === "—" || !needDetail.manager.name)){
+        streamEl.textContent = "Chargement du responsable manager…";
+        try {
+          const mgrData = await boondGet("/resources/" + needDetail.managerId, state.userToken, state.clientToken, state.clientKey);
+          const ma = (mgrData.data && mgrData.data.attributes) || mgrData.attributes || mgrData.data || {};
+          const fn = ma.firstName || ma.firstname || ma.prenom || "";
+          const ln = ma.lastName  || ma.lastname  || ma.nom    || "";
+          if(fn || ln) needDetail.manager.name = (fn + " " + ln).trim();
+          console.log("[BoondMatch] Manager résolu:", needDetail.manager.name, "id:", needDetail.managerId);
+        } catch(e){ console.warn("Manager fetch:", e.message); }
+      } else {
+        console.log("[BoondMatch] Manager depuis included:", needDetail.manager.name, "id:", needDetail.managerId);
+      }
     }
   } catch(e){ console.warn('Detail besoin:', e.message); }
 
@@ -665,7 +681,7 @@ async function startMatching(){
   const scored = candidates
     .map(c=>({...c, score: matchScore(c, needDetail)}))
     .sort((a,b)=>b.score-a.score)
-    .slice(0, 20); // Top 20
+    .slice(0, 50); // Top 50 affichés
   state.scored = scored;
   state.need = needDetail;
 
