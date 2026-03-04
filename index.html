@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.11</div>
+<div id="version-badge">v2.12</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -835,11 +835,11 @@ function bindValidation(){
 
   const notifArea = document.getElementById("notif-area");
   if(notifArea){
-    const need = state.need;
-    const vs   = state.validationStatus;
-    const mn    = (need.manager && need.manager.name) || "";
-    const mname = (mn && mn !== "—" && mn.trim() !== "") ? mn.trim() : null;
-    // Fallback : si managerId connu mais nom vide, afficher l'id
+    const need   = state.need;
+    const vs     = state.validationStatus;
+    const selIds = state.selectedCandidates; // lire depuis state, pas depuis renderValidation
+    const mn     = (need.manager && need.manager.name) || "";
+    const mname  = (mn && mn !== "—" && mn.trim() !== "") ? mn.trim() : null;
     const managerLabel = mname || (need.managerId ? "Responsable (id:" + need.managerId + ")" : null);
 
     function showYesNo(pre){
