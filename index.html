@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.14</div>
+<div id="version-badge">v2.15</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -1025,22 +1025,23 @@ async function sendBoondNotification(managerId, subject, message){
   try {
     const jwt   = await buildJWT(state.userToken, state.clientToken, state.clientKey);
     const today = new Date().toISOString().substring(0, 10);
-    const body  = JSON.stringify({
+    // Essai 1 : body minimal (title + mainManager uniquement)
+    const bodyObj = {
       data: {
         type: "action",
         attributes: {
           title:       subject,
           description: message,
           startDate:   today,
-          endDate:     today,
-          state:       1,
-          typeOf:      1
+          endDate:     today
         },
         relationships: {
           mainManager: { data: { id: String(managerId), type: "resource" } }
         }
       }
-    });
+    };
+    const body = JSON.stringify(bodyObj);
+    console.log("[BoondMatch] Notif body:", body.substring(0, 300));
     const res = await fetch("https://ui.boondmanager.com/api/actions", {
       method: "POST",
       headers: {
@@ -1050,7 +1051,7 @@ async function sendBoondNotification(managerId, subject, message){
       body: body
     });
     const respText = await res.text();
-    console.log("[BoondMatch] Notif status:", res.status, "response:", respText.substring(0, 200));
+    console.log("[BoondMatch] Notif status:", res.status, "response:", respText.substring(0, 500));
     return res.ok;
   } catch(e) {
     console.warn("[BoondMatch] Notif error:", e.message);
