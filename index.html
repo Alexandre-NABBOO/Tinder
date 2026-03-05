@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.20</div>
+<div id="version-badge">v2.21</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -1038,8 +1038,8 @@ async function sendBoondNotification(managerId, needId, needType, subject, messa
           endDate:     today
         },
         relationships: {
-          mainManager: { data: { id: String(managerId), type: "resource" } },
-          dependsOn:   { data: [{ id: String(needId),   type: needType          }] }
+          mainManager: { data: { id: String(managerId), type: "resource" } }
+          // dependsOn supprimé temporairement — on valide d'abord que le reste fonctionne
         }
       }
     };
@@ -1055,8 +1055,21 @@ async function sendBoondNotification(managerId, needId, needType, subject, messa
     });
     const respText = await res.text();
     console.log("[BoondMatch] Notif status:", res.status);
-    try { console.log("[BoondMatch] Notif errors:", JSON.stringify(JSON.parse(respText).errors, null, 2)); }
-    catch(e){ console.log("[BoondMatch] Notif raw:", respText); }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(respText);
+      if(parsed.errors) console.log("[BoondMatch] Notif errors:", JSON.stringify(parsed.errors, null, 2));
+      if(parsed.data)   console.log("[BoondMatch] Action créée ID:", parsed.data.id, "| Structure relationships:", JSON.stringify(parsed.data.relationships||{}, null, 2));
+    } catch(e){ console.log("[BoondMatch] Notif raw:", respText); }
+    // Si succès, GET sur l'action créée pour voir la structure complète
+    if(res.ok && parsed && parsed.data && parsed.data.id){
+      try {
+        const jwt2 = await buildJWT(state.userToken, state.clientToken, state.clientKey);
+        const r2 = await fetch("https://ui.boondmanager.com/api/actions/" + parsed.data.id, { headers: { "X-Jwt-Client-Boondmanager": jwt2 } });
+        const action = await r2.json();
+        console.log("[BoondMatch] GET action complète:", JSON.stringify(action.data?.relationships||{}, null, 2));
+      } catch(e2){ console.warn("[BoondMatch] GET action failed:", e2.message); }
+    }
     return res.ok;
   } catch(e) {
     console.warn("[BoondMatch] Notif error:", e.message);
