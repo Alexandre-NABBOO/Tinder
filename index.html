@@ -197,8 +197,8 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.23</div>
-<button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔍 Diag Action</button>
+<div id="version-badge">v2.27</div>
+<button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -1021,24 +1021,26 @@ function startWhatsApp(){
 }
 
 // ═══════════════════════════════════════════════════════
-// DIAGNOSTIC : GET une action existante pour voir sa structure
+// DIAGNOSTIC : GET notifications pour voir la structure
 async function diagGetAction(){
   try {
     const jwt = await buildJWT(state.userToken, state.clientToken, state.clientKey);
-    const r = await fetch("https://ui.boondmanager.com/api/actions?maxResults=1", {
-      headers: { "X-Jwt-Client-Boondmanager": jwt }
-    });
-    const json = await r.json();
-    const action = (json.data || [])[0];
-    if(action){
-      console.log("[DIAG] Action exemple ID:", action.id);
-      console.log("[DIAG] Action type:", action.type);
-      console.log("[DIAG] Relationships:", JSON.stringify(action.relationships || {}, null, 2));
-      console.log("[DIAG] Attributes:", JSON.stringify(action.attributes || {}, null, 2));
-      alert("Action ID:" + action.id + "\nType:" + action.type + "\nRelationships:\n" + JSON.stringify(action.relationships||{}, null, 2));
-    } else {
-      alert("Aucune action trouvée dans Boond");
+    // Tester les endpoints possibles pour les notifications
+    const endpoints = ["/notifications", "/alerts", "/reminders"];
+    let found = false;
+    for(const ep of endpoints){
+      const r = await fetch("https://ui.boondmanager.com/api" + ep + "?maxResults=1", {
+        headers: { "X-Jwt-Client-Boondmanager": jwt }
+      });
+      const json = await r.json();
+      console.log("[DIAG] " + ep + " status:", r.status, "| response:", JSON.stringify(json).substring(0,300));
+      if(r.ok){
+        alert("✅ Endpoint trouvé: " + ep + "\nStatus: " + r.status + "\nRéponse:\n" + JSON.stringify(json, null, 2).substring(0,500));
+        found = true;
+        break;
+      }
     }
+    if(!found) alert("❌ Aucun endpoint notification trouvé sur /notifications, /alerts, /reminders\nVoir console pour détails.");
   } catch(e){ alert("Erreur: " + e.message); }
 }
 // ═══════════════════════════════════════════════════════
@@ -1051,23 +1053,19 @@ async function sendBoondNotification(managerId, needId, needType, subject, messa
     const today = new Date().toISOString().substring(0, 10);
     const bodyObj = {
       data: {
-        type: "action",
+        type: "thread",
         attributes: {
-          title:       subject,
-          description: message,
-          typeOf:      0,
-          startDate:   today,
-          endDate:     today
+          text:  "<div>" + subject + "</div><div>" + message.replace(/\n/g, "</div><div>") + "</div>",
+          share: false
         },
         relationships: {
-          mainManager: { data: { id: String(managerId), type: "resource" } }
+          dependsOn: { data: { id: String(needId), type: "opportunity" } }
         }
       }
     };
     const body = JSON.stringify(bodyObj);
-    console.log("[BoondMatch] Notif body EXACT:", body);
-    console.log("[BoondMatch] Body parsé:", JSON.stringify(bodyObj, null, 2));
-    const res = await fetch("https://ui.boondmanager.com/api/actions", {
+    console.log("[BoondMatch] Thread body:", body);
+    const res = await fetch("https://ui.boondmanager.com/api/threads", {
       method: "POST",
       headers: {
         "Content-Type": "application/vnd.api+json",
