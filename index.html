@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.15</div>
+<div id="version-badge">v2.16</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -856,7 +856,7 @@ function bindValidation(){
           btnN.textContent = "Envoi...";
           const sel = state.scored.filter(function(c){ return state.selectedCandidates.includes(c.id); });
           const txt = sel.map(function(c){ return "- " + c.firstName + " " + c.lastName + " (" + c.score + "%)"; }).join("\n");
-          const okN = await sendBoondNotification(need.managerId, "[BoondMatch] " + need.title, txt);
+          const okN = await sendBoondNotification(need.managerId, need.id, "[BoondMatch] " + need.title, txt);
           state.validationStatus = "notified";
           const fc = okN ? "#22c55e" : "#f59e0b";
           const ft = okN ? "Notification envoyée sur Boond" : "Non envoyée - répondez manuellement";
@@ -1020,28 +1020,29 @@ function startWhatsApp(){
 // ═══════════════════════════════════════════════════════
 // BOOT
 
-async function sendBoondNotification(managerId, subject, message){
+async function sendBoondNotification(managerId, needId, subject, message){
   if(state.isMock || !managerId) return false;
   try {
     const jwt   = await buildJWT(state.userToken, state.clientToken, state.clientKey);
     const today = new Date().toISOString().substring(0, 10);
-    // Essai 1 : body minimal (title + mainManager uniquement)
     const bodyObj = {
       data: {
         type: "action",
         attributes: {
           title:       subject,
           description: message,
+          typeOf:      1,
           startDate:   today,
           endDate:     today
         },
         relationships: {
-          mainManager: { data: { id: String(managerId), type: "resource" } }
+          mainManager: { data: { id: String(managerId), type: "resource" } },
+          dependsOn:   { data: { id: String(needId),    type: "need"     } }
         }
       }
     };
     const body = JSON.stringify(bodyObj);
-    console.log("[BoondMatch] Notif body:", body.substring(0, 300));
+    console.log("[BoondMatch] Notif body:", body);
     const res = await fetch("https://ui.boondmanager.com/api/actions", {
       method: "POST",
       headers: {
@@ -1051,7 +1052,9 @@ async function sendBoondNotification(managerId, subject, message){
       body: body
     });
     const respText = await res.text();
-    console.log("[BoondMatch] Notif status:", res.status, "response:", respText.substring(0, 500));
+    console.log("[BoondMatch] Notif status:", res.status);
+    try { console.log("[BoondMatch] Notif errors:", JSON.stringify(JSON.parse(respText).errors, null, 2)); }
+    catch(e){ console.log("[BoondMatch] Notif raw:", respText); }
     return res.ok;
   } catch(e) {
     console.warn("[BoondMatch] Notif error:", e.message);
