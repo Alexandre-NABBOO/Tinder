@@ -197,7 +197,8 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.21</div>
+<div id="version-badge">v2.22</div>
+<button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔍 Diag Action</button>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -1020,6 +1021,27 @@ function startWhatsApp(){
 }
 
 // ═══════════════════════════════════════════════════════
+// DIAGNOSTIC : GET une action existante pour voir sa structure
+async function diagGetAction(){
+  try {
+    const jwt = await buildJWT(state.userToken, state.clientToken, state.clientKey);
+    const r = await fetch("https://ui.boondmanager.com/api/actions?maxResults=1", {
+      headers: { "X-Jwt-Client-Boondmanager": jwt }
+    });
+    const json = await r.json();
+    const action = (json.data || [])[0];
+    if(action){
+      console.log("[DIAG] Action exemple ID:", action.id);
+      console.log("[DIAG] Action type:", action.type);
+      console.log("[DIAG] Relationships:", JSON.stringify(action.relationships || {}, null, 2));
+      console.log("[DIAG] Attributes:", JSON.stringify(action.attributes || {}, null, 2));
+      alert("Action ID:" + action.id + "\nType:" + action.type + "\nRelationships:\n" + JSON.stringify(action.relationships||{}, null, 2));
+    } else {
+      alert("Aucune action trouvée dans Boond");
+    }
+  } catch(e){ alert("Erreur: " + e.message); }
+}
+// ═══════════════════════════════════════════════════════
 // BOOT
 
 async function sendBoondNotification(managerId, needId, needType, subject, message){
@@ -1039,7 +1061,6 @@ async function sendBoondNotification(managerId, needId, needType, subject, messa
         },
         relationships: {
           mainManager: { data: { id: String(managerId), type: "resource" } }
-          // dependsOn supprimé temporairement — on valide d'abord que le reste fonctionne
         }
       }
     };
