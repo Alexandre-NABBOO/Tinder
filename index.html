@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.16</div>
+<div id="version-badge">v2.18</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -1037,7 +1037,7 @@ async function sendBoondNotification(managerId, needId, subject, message){
         },
         relationships: {
           mainManager: { data: { id: String(managerId), type: "resource" } },
-          dependsOn:   { data: { id: String(needId),    type: "need"     } }
+          dependsOn:   { data: { id: String(needId),    type: "opportunity"     } }
         }
       }
     };
