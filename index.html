@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.18</div>
+<div id="version-badge">v2.19</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -609,6 +609,8 @@ async function startMatching(){
       if(detailData.included && d && typeof d === 'object') d.included = detailData.included;
       needDetail = normalizeNeed(d);
       needDetail.id = need.id;
+      needDetail.jsonApiType = d.type || "opportunity";  // type JSON:API réel retourné par Boond
+      console.log("[BoondMatch] need.jsonApiType:", needDetail.jsonApiType);
 
       // Résoudre le Resp Manager depuis /resources/{managerId} (toujours)
       if(needDetail.managerId){
@@ -856,7 +858,7 @@ function bindValidation(){
           btnN.textContent = "Envoi...";
           const sel = state.scored.filter(function(c){ return state.selectedCandidates.includes(c.id); });
           const txt = sel.map(function(c){ return "- " + c.firstName + " " + c.lastName + " (" + c.score + "%)"; }).join("\n");
-          const okN = await sendBoondNotification(need.managerId, need.id, "[BoondMatch] " + need.title, txt);
+          const okN = await sendBoondNotification(need.managerId, need.id, need.jsonApiType || "opportunity", "[BoondMatch] " + need.title, txt);
           state.validationStatus = "notified";
           const fc = okN ? "#22c55e" : "#f59e0b";
           const ft = okN ? "Notification envoyée sur Boond" : "Non envoyée - répondez manuellement";
@@ -1020,7 +1022,7 @@ function startWhatsApp(){
 // ═══════════════════════════════════════════════════════
 // BOOT
 
-async function sendBoondNotification(managerId, needId, subject, message){
+async function sendBoondNotification(managerId, needId, needType, subject, message){
   if(state.isMock || !managerId) return false;
   try {
     const jwt   = await buildJWT(state.userToken, state.clientToken, state.clientKey);
@@ -1037,7 +1039,7 @@ async function sendBoondNotification(managerId, needId, subject, message){
         },
         relationships: {
           mainManager: { data: { id: String(managerId), type: "resource" } },
-          dependsOn:   { data: { id: String(needId),    type: "opportunity"     } }
+          dependsOn:   { data: { id: String(needId),    type: needType          } }
         }
       }
     };
