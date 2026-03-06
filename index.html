@@ -201,7 +201,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.35</div>
+<div id="version-badge">v2.36</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -961,16 +961,24 @@ function bindValidation(){
       showWaiting(index, candidate);
       pollThreadResponse(
         threadId,
-        function(){ // OUI → approuvé → WhatsApp automatique
+        function(){ // OUI → approuvé → WhatsApp
           stopPoll();
           state.validationStatus = "approved";
-          state.validated = [candidate]; // candidat validé
-          // Notification visuelle brève
-          notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px\">✅ OUI détecté dans Boond — ouverture WhatsApp...</div>";
-          setTimeout(function(){
-            state.step = 4;
-            render();
-          }, 1500);
+          state.validated = [candidate];
+          // Générer le message WA en avance
+          genWaMessage(candidate, function(msg){
+            const phone = candidate.phone ? candidate.phone.replace(/\D/g,"") : "";
+            const waUrl = phone ? "https://web.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(msg) : "";
+            // Overlay plein écran impossible à rater
+            const overlay = document.createElement('div');
+            overlay.style.cssText = "position:fixed;inset:0;background:#052e16ee;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;";
+            overlay.innerHTML = "<div style=\"font-size:48px\">✅</div>"
+              + "<div style=\"color:#4ade80;font-size:22px;font-weight:800;text-align:center\">Manager a validé !</div>"
+              + "<div style=\"color:#f1f5f9;font-size:15px;text-align:center\">Cliquez pour contacter<br><b>" + escHtml(candidate.firstName + " " + candidate.lastName) + "</b> sur WhatsApp</div>"
+              + (waUrl ? "<a href=\"" + waUrl + "\" target=\"_blank\" rel=\"noopener\" onclick=\"this.closest(\'div\').remove();document.getElementById(\'screen\').innerHTML=document.getElementById(\'screen\').innerHTML;\" style=\"display:inline-flex;align-items:center;gap:12px;background:#25d366;color:#fff;font-size:20px;font-weight:800;padding:18px 40px;border-radius:16px;text-decoration:none;animation:pulse-green 1s infinite\">⊕ Ouvrir WhatsApp</a>" : "<div style=\"color:#f59e0b\">⚠️ Numéro non renseigné — allez à l\'étape WhatsApp</div>")
+              + "<button onclick=\"this.parentElement.remove();state.step=4;render();\" style=\"background:transparent;border:1px solid #334155;color:#94a3b8;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:13px\">Voir l\'étape WhatsApp →</button>";
+            document.body.appendChild(overlay);
+          });
         },
         function(){ // NON → proposer suivant
           stopPoll();
@@ -1027,9 +1035,21 @@ function bindValidation(){
             stopPoll();
             state.validationStatus = "approved";
             const cand2 = scored[state.proposalIndex || 0];
-            if(cand2){ state.validated = [cand2]; }
-            notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px\">✅ OUI détecté dans Boond — ouverture WhatsApp...</div>";
-            setTimeout(function(){ state.step = 4; render(); }, 1500);
+            if(cand2){
+              state.validated = [cand2];
+              genWaMessage(cand2, function(msg){
+                const phone = cand2.phone ? cand2.phone.replace(/\D/g,"") : "";
+                const waUrl = phone ? "https://web.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(msg) : "";
+                const overlay = document.createElement('div');
+                overlay.style.cssText = "position:fixed;inset:0;background:#052e16ee;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;";
+                overlay.innerHTML = "<div style=\"font-size:48px\">✅</div>"
+                  + "<div style=\"color:#4ade80;font-size:22px;font-weight:800\">Manager a validé !</div>"
+                  + "<div style=\"color:#f1f5f9;font-size:15px;text-align:center\">Cliquez pour contacter<br><b>" + escHtml(cand2.firstName + " " + cand2.lastName) + "</b></div>"
+                  + (waUrl ? "<a href=\"" + waUrl + "\" target=\"_blank\" rel=\"noopener\" style=\"display:inline-flex;align-items:center;gap:12px;background:#25d366;color:#fff;font-size:20px;font-weight:800;padding:18px 40px;border-radius:16px;text-decoration:none;animation:pulse-green 1s infinite\">⊕ Ouvrir WhatsApp</a>" : "")
+                  + "<button onclick=\"this.parentElement.remove();state.step=4;render();\" style=\"background:transparent;border:1px solid #334155;color:#94a3b8;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:13px\">Voir l\'étape WhatsApp →</button>";
+                document.body.appendChild(overlay);
+              });
+            }
           },
           function(){ stopPoll(); state.validationStatus="pending"; proposeCandidate((state.proposalIndex||0) + 1); }
         );
