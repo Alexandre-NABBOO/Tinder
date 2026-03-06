@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.33</div>
+<div id="version-badge">v2.34</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -957,10 +957,16 @@ function bindValidation(){
       showWaiting(index, candidate);
       pollThreadResponse(
         threadId,
-        function(){ // OUI → approuvé
+        function(){ // OUI → approuvé → WhatsApp automatique
           stopPoll();
           state.validationStatus = "approved";
-          refresh();
+          state.validated = [candidate]; // candidat validé
+          // Notification visuelle brève
+          notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px\">✅ OUI détecté dans Boond — ouverture WhatsApp...</div>";
+          setTimeout(function(){
+            state.step = 4;
+            render();
+          }, 1500);
         },
         function(){ // NON → proposer suivant
           stopPoll();
@@ -1013,7 +1019,14 @@ function bindValidation(){
         showWaiting(state.proposalIndex || 0, cand);
         pollThreadResponse(
           state.threadId,
-          function(){ stopPoll(); state.validationStatus="approved"; refresh(); },
+          function(){
+            stopPoll();
+            state.validationStatus = "approved";
+            const cand2 = scored[state.proposalIndex || 0];
+            if(cand2){ state.validated = [cand2]; }
+            notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px\">✅ OUI détecté dans Boond — ouverture WhatsApp...</div>";
+            setTimeout(function(){ state.step = 4; render(); }, 1500);
+          },
           function(){ stopPoll(); state.validationStatus="pending"; proposeCandidate((state.proposalIndex||0) + 1); }
         );
       } else if(cand){
@@ -1087,7 +1100,7 @@ function renderWhatsApp(){
   </div>`).join('')}`;
 }
 
-async function genWaMessage(c){
+async function genWaMessage(c, onReady){
   const need = state.need;
   state.waGenerating[c.id] = true;
   refreshWaCard(c);
@@ -1113,6 +1126,7 @@ Le message doit être: court (5-7 lignes), chaleureux et direct, mentionner que 
   }
   state.waGenerating[c.id] = false;
   refreshWaCard(c);
+  if(onReady && state.waMessages[c.id]) onReady(state.waMessages[c.id]);
 }
 
 function refreshWaCard(c){
@@ -1138,8 +1152,19 @@ function refreshWaCard(c){
 }
 
 function startWhatsApp(){
-  // Generate all messages
-  state.validated.forEach(c=>{ if(!state.waMessages[c.id]) genWaMessage(c); });
+  // Generate all messages + ouvrir WhatsApp auto pour le premier candidat
+  state.validated.forEach((c,i)=>{
+    if(!state.waMessages[c.id]){
+      genWaMessage(c, i === 0 ? function(msg){
+        // Auto-ouvrir WhatsApp pour le 1er candidat dès que le message est prêt
+        if(c.phone && c.phone !== "—" && c.phone !== ""){
+          setTimeout(function(){
+            window.open("https://web.whatsapp.com/send?phone=" + c.phone.replace(/\D/g,"") + "&text=" + encodeURIComponent(msg), "_blank");
+          }, 500);
+        }
+      } : null);
+    }
+  });
 
   // Bind events (delegation)
   document.getElementById('screen').addEventListener('click',e=>{
