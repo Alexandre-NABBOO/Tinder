@@ -201,7 +201,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.37</div>
+<div id="version-badge">v2.39</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -667,15 +667,36 @@ async function startMatching(){
   let candidates = MOCK_CANDIDATES;
   try {
     if(!state.isMock){
-      streamEl.style.color='#f59e0b'; streamEl.textContent='Chargement de 100 ressources Boond…';
-      const resData = await boondGet('/resources?maxResults=100&state=1', state.userToken, state.clientToken, state.clientKey);
-      const items = (resData.data || resData.resources || []).slice(0, 100);
+      // Chargement paginé de TOUTES les ressources actives
+      streamEl.style.color='#f59e0b'; streamEl.textContent='Chargement des ressources Boond…';
+      let items = [];
+      let page = 1;
+      const PAGE_SIZE = 100;
+      while(true){
+        const resData = await boondGet(`/resources?maxResults=${PAGE_SIZE}&page=${page}&state=1`, state.userToken, state.clientToken, state.clientKey);
+        const batch = resData.data || resData.resources || [];
+        items = items.concat(batch);
+        streamEl.textContent = `Chargement des ressources… ${items.length} chargées`;
+        // Boond renvoie moins que PAGE_SIZE → dernière page
+        if(batch.length < PAGE_SIZE) break;
+        page++;
+        // Sécurité : max 500 ressources (5 pages)
+        if(items.length >= 500) break;
+      }
+      streamEl.textContent = `${items.length} ressources actives trouvées`;
       if(items.length > 0){
-        // Charger détails en parallèle (commentaires + références)
-        streamEl.textContent = `Chargement des détails (${items.length} profils en parallèle)…`;
-        const details = await Promise.allSettled(
-          items.map(r => boondGet(`/resources/${r.id}`, state.userToken, state.clientToken, state.clientKey))
-        );
+        // Charger détails par batches de 20 (évite de saturer l'API)
+        streamEl.textContent = `Chargement des détails (${items.length} profils)…`;
+        const BATCH = 20;
+        const details = [];
+        for(let i=0; i<items.length; i+=BATCH){
+          const batchItems = items.slice(i, i+BATCH);
+          streamEl.textContent = `Chargement des détails… ${Math.min(i+BATCH, items.length)}/${items.length}`;
+          const batchResults = await Promise.allSettled(
+            batchItems.map(r => boondGet(`/resources/${r.id}`, state.userToken, state.clientToken, state.clientKey))
+          );
+          details.push(...batchResults);
+        }
 
         candidates = items.map((r, i) => {
           const a = r.attributes || r;
@@ -967,7 +988,7 @@ function bindValidation(){
           state.validated = [candidate];
           genWaMessage(candidate, async function(msg){
             const phone = candidate.phone ? candidate.phone.replace(/\D/g,"") : "";
-            const waUrl = phone ? "https://wa.me/" + phone + "?text=" + encodeURIComponent(msg) : "";
+            const waUrl = phone ? "https://web.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(msg) : "";
             if(waUrl && state.need && state.need.id){
               // Poster un nouveau message dans le fil avec le lien cliquable
               const replyText = "✅ Validation confirmée !\n\nCliquez ci-dessous pour contacter " + candidate.firstName + " " + candidate.lastName + " sur WhatsApp :\n" + waUrl;
@@ -1055,7 +1076,7 @@ function bindValidation(){
               state.validated = [cand2];
               genWaMessage(cand2, async function(msg){
                 const phone = cand2.phone ? cand2.phone.replace(/\D/g,"") : "";
-                const waUrl = phone ? "https://wa.me/" + phone + "?text=" + encodeURIComponent(msg) : "";
+                const waUrl = phone ? "https://web.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(msg) : "";
                 if(waUrl && state.need && state.need.id){
                   const jwt = await buildJWT(state.userToken, state.clientToken, state.clientKey);
                   const replyBody = {
