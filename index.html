@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.30</div>
+<div id="version-badge">v2.31</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -247,11 +247,36 @@ const MOCK_CANDIDATES = [
 function initials(c){ return (c.firstName[0]+c.lastName[0]).toUpperCase(); }
 
 function matchScore(candidate, need){
-  if(!need.skills||!need.skills.length) return 0;
-  const matched = candidate.skills.filter(s =>
-    need.skills.some(ns => ns.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(ns.toLowerCase()))
-  );
-  return Math.round(matched.length / need.skills.length * 100);
+  // Scoring provisoire multi-critères (remplacé par scoring IA Claude ensuite)
+  let score = 0;
+  // 1. Skills matching (40 pts)
+  if(need.skills && need.skills.length){
+    const matched = candidate.skills.filter(s =>
+      need.skills.some(ns => ns.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(ns.toLowerCase()))
+    );
+    score += Math.round((matched.length / need.skills.length) * 40);
+  }
+  // 2. Titre / poste (30 pts)
+  if(need.title && candidate.title){
+    const nt = need.title.toLowerCase();
+    const ct = candidate.title.toLowerCase();
+    const needWords = nt.split(/\s+/).filter(w=>w.length>3);
+    const titleMatches = needWords.filter(w => ct.includes(w));
+    if(titleMatches.length > 0) score += Math.round((titleMatches.length / needWords.length) * 30);
+  }
+  // 3. TJM compatible (15 pts)
+  if(need.tjm && candidate.tjm){
+    const ratio = candidate.tjm / need.tjm;
+    if(ratio <= 1.1) score += 15;
+    else if(ratio <= 1.3) score += 8;
+  } else if(!candidate.tjm){ score += 8; } // TJM non renseigné = neutre
+  // 4. Commentaire / références contiennent mots-clés (15 pts)
+  if(need.skills && need.skills.length){
+    const blob = ((candidate.commentaire||'') + ' ' + (candidate.references||'')).toLowerCase();
+    const kwMatches = need.skills.filter(s => blob.includes(s.toLowerCase()));
+    if(kwMatches.length) score += Math.round((kwMatches.length / need.skills.length) * 15);
+  }
+  return Math.min(score, 99); // max 99 pour laisser le scoring IA final décider du 100
 }
 
 function escHtml(str){ return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -585,14 +610,13 @@ function renderMatching(){
     </div>
     <div id="stream-text" style="color:#475569;font-size:13px;font-style:italic">Analyse des profils en cours…</div>
   </div>
-  <button class="btn btn-disabled" id="btn-next-match" disabled>Soumettre au responsable →</button>`;
+  <div id="auto-next-msg" style="color:#f59e0b;font-size:11px;text-align:center;margin-top:8px"></div>`;
 }
 
 async function startMatching(){
   const need  = state.need;
   const streamEl = document.getElementById('stream-text');
   const dotEl    = document.querySelector('.stream-dot');
-  const btnNext  = document.getElementById('btn-next-match');
 
   // Charger le détail du besoin
   let needDetail = need;
@@ -690,19 +714,78 @@ async function startMatching(){
     }
   } catch(e){ console.warn('Ressources:', e.message); candidates = MOCK_CANDIDATES; }
 
-  const scored = candidates
+  // Pré-tri provisoire par matchScore (multi-critères)
+  const preSorted = candidates
     .map(c=>({...c, score: matchScore(c, needDetail)}))
     .sort((a,b)=>b.score-a.score)
-    .slice(0, 50); // Top 50 affichés
-  state.scored = scored;
+    .slice(0, 20); // Top 20 pour scoring IA
+
   state.need = needDetail;
-  state.proposalIndex = 0;  // reset à chaque nouveau besoin
+  state.proposalIndex = 0;
 
-  // Animate scores
-  // Mettre à jour le compteur
   const countEl = document.getElementById('cands-count');
-  if(countEl) countEl.textContent = `${scored.length} ressources analysées${state.isMock?' (données démo)':' depuis Boond'}`;
+  if(countEl) countEl.textContent = `Scoring IA en cours sur ${preSorted.length} profils…`;
 
+  // ── SCORING IA CLAUDE : attribue un score 0-100 à chaque candidat ──
+  streamEl.style.color='#f59e0b'; streamEl.textContent = 'Scoring IA des profils par Claude…';
+
+  const scoringPrompt = `Tu es un expert RH spécialisé en recrutement technique (nucléaire, défense, ingénierie).
+
+BESOIN:
+Titre: ${needDetail.title}
+Client: ${needDetail.client}
+Compétences requises: ${(needDetail.skills||[]).join(', ')||'non précisées'}
+TJM cible: ${needDetail.tjm||'non précisé'}€/j
+Localisation: ${needDetail.location||'non précisée'}
+Description: ${needDetail.description||''}
+
+CANDIDATS À ÉVALUER:
+${preSorted.map((c,i)=>`ID:${c.id} | ${c.firstName} ${c.lastName} | Poste: ${c.title||'—'} | TJM: ${c.tjm||'?'}€/j | Lieu: ${c.location||'—'}
+Skills: ${c.skills.slice(0,10).join(', ')||'non renseignés'}
+${c.commentaire?'Info: '+c.commentaire.slice(0,200):''}
+${c.references?'Refs: '+c.references.slice(0,200):''}`).join('\n---\n')}
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans explication:
+{"scores":[{"id":"ID_CANDIDAT","score":85,"raison":"...courte raison..."},...]}
+
+Critères de scoring (0-100):
+- 40pts: correspondance compétences techniques avec le besoin
+- 25pts: pertinence du titre/poste actuel
+- 20pts: cohérence TJM avec le budget
+- 15pts: expériences et références liées au secteur
+
+Classe du meilleur au moins bon.`;
+
+  let aiScores = {};
+  try{
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':state.claudeKey},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1500,
+        messages:[{role:'user',content:scoringPrompt}] })
+    });
+    const aiJson = await aiRes.json();
+    const aiText = (aiJson.content||[]).map(b=>b.text||'').join('');
+    const parsed = JSON.parse(aiText.replace(/```json|```/g,'').trim());
+    (parsed.scores||[]).forEach(s=>{ aiScores[s.id] = {score:s.score, raison:s.raison}; });
+    console.log('[BoondMatch] AI scores:', aiScores);
+  } catch(e){
+    console.warn('[BoondMatch] Scoring IA échoué, fallback matchScore:', e.message);
+  }
+
+  // Appliquer les scores IA ou fallback
+  const scored = preSorted
+    .map(c=>({...c,
+      score:   aiScores[c.id] ? aiScores[c.id].score : c.score,
+      raison:  aiScores[c.id] ? aiScores[c.id].raison : ''
+    }))
+    .sort((a,b)=>b.score-a.score);
+
+  state.scored = scored;
+
+  if(countEl) countEl.textContent = `${scored.length} profils classés par l\'IA`;
+
+  // Afficher les scores animés
   scored.forEach((c,i)=>{
     const row   = document.getElementById(`cand-${c.id}`);
     const scEl  = document.getElementById(`score-${c.id}`);
@@ -721,45 +804,39 @@ async function startMatching(){
         const nameEl = row.querySelector('div[style*="font-weight:700"]');
         if(nameEl) nameEl.innerHTML += ' <span style="font-size:9px;background:#f59e0b;color:#000;border-radius:3px;padding:2px 6px;font-weight:800;vertical-align:middle">TOP</span>';
       }
-    }, i*200);
+    }, i*150);
   });
 
-  // Stream analysis
+  // ── ANALYSE NARRATIVE Claude (stream) ──
+  streamEl.style.color='#f59e0b'; streamEl.textContent = 'Rédaction de l\'analyse…';
   const prompt = `Tu es un expert en recrutement pour le secteur nucléaire et ingénierie.
 
-BESOIN:
-- Titre: ${need.title}
-- Client: ${need.client}
-- Compétences requises: ${(need.skills||[]).join(', ')||'non précisées'}
-- TJM cible: ${need.tjm}€/j
-- Localisation: ${need.location}
-- Description: ${need.description}
+BESOIN: ${needDetail.title} | Client: ${needDetail.client} | TJM: ${needDetail.tjm}€/j | Lieu: ${needDetail.location}
+Compétences: ${(needDetail.skills||[]).join(', ')||'non précisées'}
 
-CANDIDATS (triés par score):
-${scored.map((c,i)=>`${i+1}. ${c.firstName} ${c.lastName} (Score: ${c.score}%) - ${c.title} - TJM: ${c.tjm}€ - ${c.location}
-   Compétences: ${c.skills.join(', ')||'non renseignées'}
-   ${c.commentaire?'Commentaire: '+c.commentaire.slice(0,300):''}
-   ${c.references?'Références: '+c.references.slice(0,400):''}`).join('\n---\n')}
+CLASSEMENT IA (top 5):
+${scored.slice(0,5).map((c,i)=>`${i+1}. ${c.firstName} ${c.lastName} — Score IA: ${c.score}%
+   Poste: ${c.title||'—'} | TJM: ${c.tjm||'?'}€ | ${c.location||'—'}
+   ${c.raison?'Raison IA: '+c.raison:''}
+   Skills: ${c.skills.slice(0,8).join(', ')||'—'}
+   ${c.commentaire?'Info: '+c.commentaire.slice(0,200):''}`).join('\n---\n')}
 
-Fournis une analyse concise (3-4 paragraphes) :
-1. Le ou les candidats recommandés en priorité et pourquoi
-2. Points forts et points d'attention par candidat retenu
-3. Recommandation actionnable pour le manager
-
-Sois direct, professionnel, précis.`;
+Analyse en 3 paragraphes concis:
+1. Candidat #1 recommandé et pourquoi
+2. Alternatives pertinentes (rang 2-3)
+3. Recommandation actionnable pour le manager`;
 
   try{
     const res = await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':state.claudeKey},
-      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, stream:true,
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:800, stream:true,
         messages:[{role:'user',content:prompt}] })
     });
 
     const reader  = res.body.getReader();
     const decoder = new TextDecoder();
     let full = '';
-
     while(true){
       const {done,value} = await reader.read();
       if(done) break;
@@ -777,8 +854,10 @@ Sois direct, professionnel, précis.`;
     }
     streamEl.textContent = full;
     if(dotEl){ dotEl.style.background='#22c55e'; dotEl.style.boxShadow='none'; dotEl.classList.remove('anim-pulse'); }
-    btnNext.disabled=false; btnNext.className='btn btn-blue';
-    btnNext.addEventListener('click',()=>{ state.step=3; render(); });
+
+    // ── PASSAGE AUTOMATIQUE à l\'étape validation ──
+    streamEl.insertAdjacentHTML('afterend','<div style="color:#22c55e;font-size:11px;margin-top:8px;text-align:center">✅ Analyse terminée — passage automatique à la validation...</div>');
+    setTimeout(()=>{ state.step=3; render(); }, 2000);
 
   }catch(e){
     streamEl.style.color='#ef4444';
@@ -1133,11 +1212,28 @@ async function pollThreadResponse(threadId, onApprove, onReject){
       });
       const json = await r.json();
       // Vérifier les threads enfants (réponses)
-      const r2 = await fetch("https://ui.boondmanager.com/api/threads?parentThread=" + threadId + "&maxResults=20&orderBy=id&order=desc", {
-        headers: { "X-Jwt-Client-Boondmanager": jwt }
-      });
-      const json2 = await r2.json();
-      const answers = json2.data || [];
+      // Chercher les réponses via plusieurs endpoints
+      let answers = [];
+      // Endpoint 1 : réponses enfants du thread
+      try {
+        const r2 = await fetch("https://ui.boondmanager.com/api/threads?parentThread=" + threadId + "&maxResults=20", {
+          headers: { "X-Jwt-Client-Boondmanager": jwt }
+        });
+        const json2 = await r2.json();
+        answers = json2.data || [];
+      } catch(e2){}
+      // Endpoint 2 : chercher dans le fil de l'opportunité tous les threads récents
+      if(answers.length === 0 && state.need && state.need.id){
+        try {
+          const r3 = await fetch("https://ui.boondmanager.com/api/threads?dependsOn=" + state.need.id + "&maxResults=20", {
+            headers: { "X-Jwt-Client-Boondmanager": jwt }
+          });
+          const json3 = await r3.json();
+          // Filtrer seulement les threads créés après le threadId
+          const all = json3.data || [];
+          answers = all.filter(t => parseInt(t.id) > parseInt(threadId));
+        } catch(e3){}
+      }
       console.log("[BoondMatch] Poll réponses:", answers.length, answers.map(a=>(a.attributes||{}).text));
       for(const ans of answers){
         const raw = (ans.attributes && ans.attributes.text) || "";
