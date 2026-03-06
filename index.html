@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.27</div>
+<div id="version-badge">v2.29</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -858,16 +858,52 @@ function bindValidation(){
           btnN.disabled = true;
           btnN.textContent = "Envoi...";
           const sel = state.scored.filter(function(c){ return state.selectedCandidates.includes(c.id); });
-          const txt = sel.map(function(c){ return "- " + c.firstName + " " + c.lastName + " (" + c.score + "%)"; }).join("\n");
-          const okN = await sendBoondNotification(need.managerId, need.id, need.jsonApiType || "opportunity", "[BoondMatch] " + need.title, txt);
+          const lines = sel.map(function(c){
+            const tjm  = c.tjm  ? c.tjm  + " €/j"  : "TJM n/c";
+            const dispo = c.availability || "dispo n/c";
+            return "• " + c.firstName + " " + c.lastName + " — " + c.score + "% de match | " + tjm + " | " + dispo;
+          });
+          const txt = [
+            "Bonjour,",
+            "",
+            "Suite à l'analyse IA du besoin « " + need.title + " » (" + need.id + "), voici les profils sélectionnés :",
+            "",
+            ...lines,
+            "",
+            "Merci de confirmer votre accord pour les contacter.",
+            "",
+            "Cordialement,",
+            "BoondMatch — NABBOO.AI"
+          ].join("\n");
+          const threadId = await sendBoondNotification(need.managerId, need.id, need.jsonApiType || "opportunity", need.title, txt);
           state.validationStatus = "notified";
-          const fc = okN ? "#22c55e" : "#f59e0b";
-          const ft = okN ? "Notification envoyée sur Boond" : "Non envoyée - répondez manuellement";
-          showYesNo("<div style=\"color:" + fc + ";font-size:12px;margin-bottom:8px\">" + ft + "</div>");
+          state.threadId = threadId || null;
+          if(threadId){
+            pollThreadResponse(threadId);
+            notifArea.innerHTML = "<div style=\"color:#22c55e;font-size:12px;margin-bottom:8px\">✅ Message posté sur le fil Boond</div>"
+              + "<div style=\"color:#94a3b8;font-size:11px;margin-bottom:10px\">⏳ En attente de réponse du manager dans Boond (OUI / NON)...</div>"
+              + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
+              + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">Valider manuellement</button>"
+              + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">Refuser manuellement</button>"
+              + "</div>";
+            document.getElementById("btn-yes").addEventListener("click", function(){ stopPoll(); state.validationStatus="approved"; refresh(); });
+            document.getElementById("btn-no").addEventListener("click",  function(){ stopPoll(); state.validationStatus="rejected"; refresh(); });
+          } else {
+            showYesNo("<div style=\"color:#f59e0b;font-size:12px;margin-bottom:8px\">⚠️ Envoi échoué — validez manuellement</div>");
+          }
         });
       }
     } else if(vs === "notified"){
-      showYesNo("<div style=\"color:#f59e0b;font-size:12px;margin-bottom:8px\">En attente de réponse...</div>");
+      // Reprendre le poll si on a un threadId et que le poll est arrêté
+      if(state.threadId && !_pollInterval) pollThreadResponse(state.threadId);
+      notifArea.innerHTML = "<div style=\"color:#22c55e;font-size:12px;margin-bottom:8px\">✅ Message posté sur le fil Boond</div>"
+        + "<div style=\"color:#94a3b8;font-size:11px;margin-bottom:10px\">⏳ En attente de réponse du manager (OUI / NON dans Boond)...</div>"
+        + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
+        + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">Valider manuellement</button>"
+        + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">Refuser manuellement</button>"
+        + "</div>";
+      document.getElementById("btn-yes").addEventListener("click", function(){ stopPoll(); state.validationStatus="approved"; refresh(); });
+      document.getElementById("btn-no").addEventListener("click",  function(){ stopPoll(); state.validationStatus="rejected"; refresh(); });
     } else if(vs === "approved"){
       notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px;margin-bottom:10px\">✅ Validé !</div>";
     } else if(vs === "rejected"){
@@ -1043,6 +1079,43 @@ async function diagGetAction(){
     if(!found) alert("❌ Aucun endpoint notification trouvé sur /notifications, /alerts, /reminders\nVoir console pour détails.");
   } catch(e){ alert("Erreur: " + e.message); }
 }
+
+// ═══════════════════════════════════════════════════════
+// POLL : surveille les réponses au thread Boond
+let _pollInterval = null;
+function stopPoll(){ if(_pollInterval){ clearInterval(_pollInterval); _pollInterval = null; } }
+
+async function pollThreadResponse(threadId){
+  stopPoll();
+  console.log("[BoondMatch] Poll démarré sur thread", threadId);
+  _pollInterval = setInterval(async function(){
+    try {
+      const jwt = await buildJWT(state.userToken, state.clientToken, state.clientKey);
+      const r = await fetch("https://ui.boondmanager.com/api/threads?parentThread=" + threadId + "&maxResults=10", {
+        headers: { "X-Jwt-Client-Boondmanager": jwt }
+      });
+      const json = await r.json();
+      const answers = json.data || [];
+      console.log("[BoondMatch] Poll réponses:", answers.length);
+      for(const ans of answers){
+        const txt = (ans.attributes && ans.attributes.text || "").replace(/<[^>]+>/g,"").trim().toUpperCase();
+        console.log("[BoondMatch] Réponse texte:", txt);
+        if(txt.includes("OUI") || txt.includes("OK") || txt.includes("ACCORD") || txt.includes("VALID")){
+          stopPoll();
+          state.validationStatus = "approved";
+          refresh();
+          return;
+        }
+        if(txt.includes("NON") || txt.includes("REFUS") || txt.includes("KO")){
+          stopPoll();
+          state.validationStatus = "rejected";
+          refresh();
+          return;
+        }
+      }
+    } catch(e){ console.warn("[BoondMatch] Poll error:", e.message); }
+  }, 15000); // toutes les 15 secondes
+}
 // ═══════════════════════════════════════════════════════
 // BOOT
 
@@ -1079,18 +1152,12 @@ async function sendBoondNotification(managerId, needId, needType, subject, messa
     try {
       parsed = JSON.parse(respText);
       if(parsed.errors) console.log("[BoondMatch] Notif errors:", JSON.stringify(parsed.errors, null, 2));
-      if(parsed.data)   console.log("[BoondMatch] Action créée ID:", parsed.data.id, "| Structure relationships:", JSON.stringify(parsed.data.relationships||{}, null, 2));
+      if(parsed.data)   console.log("[BoondMatch] Thread créé ID:", parsed.data.id);
     } catch(e){ console.log("[BoondMatch] Notif raw:", respText); }
-    // Si succès, GET sur l'action créée pour voir la structure complète
     if(res.ok && parsed && parsed.data && parsed.data.id){
-      try {
-        const jwt2 = await buildJWT(state.userToken, state.clientToken, state.clientKey);
-        const r2 = await fetch("https://ui.boondmanager.com/api/actions/" + parsed.data.id, { headers: { "X-Jwt-Client-Boondmanager": jwt2 } });
-        const action = await r2.json();
-        console.log("[BoondMatch] GET action complète:", JSON.stringify(action.data?.relationships||{}, null, 2));
-      } catch(e2){ console.warn("[BoondMatch] GET action failed:", e2.message); }
+      return parsed.data.id; // retourne l'ID du thread
     }
-    return res.ok;
+    return null;
   } catch(e) {
     console.warn("[BoondMatch] Notif error:", e.message);
     return false;
