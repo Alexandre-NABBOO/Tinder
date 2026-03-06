@@ -201,7 +201,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.36</div>
+<div id="version-badge">v2.37</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -961,23 +961,39 @@ function bindValidation(){
       showWaiting(index, candidate);
       pollThreadResponse(
         threadId,
-        function(){ // OUI → approuvé → WhatsApp
+        function(){ // OUI → poster lien WA dans le fil Boond
           stopPoll();
           state.validationStatus = "approved";
           state.validated = [candidate];
-          // Générer le message WA en avance
-          genWaMessage(candidate, function(msg){
+          genWaMessage(candidate, async function(msg){
             const phone = candidate.phone ? candidate.phone.replace(/\D/g,"") : "";
-            const waUrl = phone ? "https://web.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(msg) : "";
-            // Overlay plein écran impossible à rater
-            const overlay = document.createElement('div');
-            overlay.style.cssText = "position:fixed;inset:0;background:#052e16ee;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;";
-            overlay.innerHTML = "<div style=\"font-size:48px\">✅</div>"
-              + "<div style=\"color:#4ade80;font-size:22px;font-weight:800;text-align:center\">Manager a validé !</div>"
-              + "<div style=\"color:#f1f5f9;font-size:15px;text-align:center\">Cliquez pour contacter<br><b>" + escHtml(candidate.firstName + " " + candidate.lastName) + "</b> sur WhatsApp</div>"
-              + (waUrl ? "<a href=\"" + waUrl + "\" target=\"_blank\" rel=\"noopener\" onclick=\"this.closest(\'div\').remove();document.getElementById(\'screen\').innerHTML=document.getElementById(\'screen\').innerHTML;\" style=\"display:inline-flex;align-items:center;gap:12px;background:#25d366;color:#fff;font-size:20px;font-weight:800;padding:18px 40px;border-radius:16px;text-decoration:none;animation:pulse-green 1s infinite\">⊕ Ouvrir WhatsApp</a>" : "<div style=\"color:#f59e0b\">⚠️ Numéro non renseigné — allez à l\'étape WhatsApp</div>")
-              + "<button onclick=\"this.parentElement.remove();state.step=4;render();\" style=\"background:transparent;border:1px solid #334155;color:#94a3b8;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:13px\">Voir l\'étape WhatsApp →</button>";
-            document.body.appendChild(overlay);
+            const waUrl = phone ? "https://wa.me/" + phone + "?text=" + encodeURIComponent(msg) : "";
+            if(waUrl && state.need && state.need.id){
+              // Poster un nouveau message dans le fil avec le lien cliquable
+              const replyText = "✅ Validation confirmée !\n\nCliquez ci-dessous pour contacter " + candidate.firstName + " " + candidate.lastName + " sur WhatsApp :\n" + waUrl;
+              const jwt = await buildJWT(state.userToken, state.clientToken, state.clientKey);
+              const replyBody = {
+                data: {
+                  type: "thread",
+                  attributes: {
+                    text: "<div>✅ <b>Validation confirmée !</b></div><div><br></div><div>Cliquez pour contacter <b>" + candidate.firstName + " " + candidate.lastName + "</b> sur WhatsApp :</div><div><a href=\"" + waUrl + "\">" + waUrl + "</a></div>",
+                    share: false
+                  },
+                  relationships: {
+                    dependsOn: { data: { id: String(state.need.id), type: "opportunity" } },
+                    parentThread: { data: { id: String(state.threadId), type: "thread" } }
+                  }
+                }
+              };
+              await fetch("https://ui.boondmanager.com/api/threads", {
+                method: "POST",
+                headers: { "Content-Type": "application/vnd.api+json", "X-Jwt-Client-Boondmanager": jwt },
+                body: JSON.stringify(replyBody)
+              });
+            }
+            // Passer à l'étape WhatsApp dans BoondMatch
+            state.step = 4;
+            render();
           });
         },
         function(){ // NON → proposer suivant
@@ -1037,17 +1053,32 @@ function bindValidation(){
             const cand2 = scored[state.proposalIndex || 0];
             if(cand2){
               state.validated = [cand2];
-              genWaMessage(cand2, function(msg){
+              genWaMessage(cand2, async function(msg){
                 const phone = cand2.phone ? cand2.phone.replace(/\D/g,"") : "";
-                const waUrl = phone ? "https://web.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(msg) : "";
-                const overlay = document.createElement('div');
-                overlay.style.cssText = "position:fixed;inset:0;background:#052e16ee;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;";
-                overlay.innerHTML = "<div style=\"font-size:48px\">✅</div>"
-                  + "<div style=\"color:#4ade80;font-size:22px;font-weight:800\">Manager a validé !</div>"
-                  + "<div style=\"color:#f1f5f9;font-size:15px;text-align:center\">Cliquez pour contacter<br><b>" + escHtml(cand2.firstName + " " + cand2.lastName) + "</b></div>"
-                  + (waUrl ? "<a href=\"" + waUrl + "\" target=\"_blank\" rel=\"noopener\" style=\"display:inline-flex;align-items:center;gap:12px;background:#25d366;color:#fff;font-size:20px;font-weight:800;padding:18px 40px;border-radius:16px;text-decoration:none;animation:pulse-green 1s infinite\">⊕ Ouvrir WhatsApp</a>" : "")
-                  + "<button onclick=\"this.parentElement.remove();state.step=4;render();\" style=\"background:transparent;border:1px solid #334155;color:#94a3b8;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:13px\">Voir l\'étape WhatsApp →</button>";
-                document.body.appendChild(overlay);
+                const waUrl = phone ? "https://wa.me/" + phone + "?text=" + encodeURIComponent(msg) : "";
+                if(waUrl && state.need && state.need.id){
+                  const jwt = await buildJWT(state.userToken, state.clientToken, state.clientKey);
+                  const replyBody = {
+                    data: {
+                      type: "thread",
+                      attributes: {
+                        text: "<div>✅ <b>Validation confirmée !</b></div><div><br></div><div>Cliquez pour contacter <b>" + cand2.firstName + " " + cand2.lastName + "</b> sur WhatsApp :</div><div><a href=\"" + waUrl + "\">" + waUrl + "</a></div>",
+                        share: false
+                      },
+                      relationships: {
+                        dependsOn: { data: { id: String(state.need.id), type: "opportunity" } },
+                        parentThread: { data: { id: String(state.threadId), type: "thread" } }
+                      }
+                    }
+                  };
+                  await fetch("https://ui.boondmanager.com/api/threads", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/vnd.api+json", "X-Jwt-Client-Boondmanager": jwt },
+                    body: JSON.stringify(replyBody)
+                  });
+                }
+                state.step = 4;
+                render();
               });
             }
           },
