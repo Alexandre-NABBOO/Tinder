@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.32</div>
+<div id="version-badge">v2.33</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -1212,27 +1212,37 @@ async function pollThreadResponse(threadId, onApprove, onReject){
       });
       const json = await r.json();
       // Vérifier les threads enfants (réponses)
-      // Chercher les réponses : threads liés à l'opportunité avec id > threadId
+      // Chercher les réponses directement sur le thread parent
       let answers = [];
-      if(state.need && state.need.id){
-        try {
-          const r2 = await fetch("https://ui.boondmanager.com/api/threads?keywords=" + state.need.id + "&maxResults=50", {
+      try {
+        // Appel direct : GET /threads/{threadId} pour voir numberOfAnswers
+        const rDirect = await fetch("https://ui.boondmanager.com/api/threads/" + threadId, {
+          headers: { "X-Jwt-Client-Boondmanager": jwt }
+        });
+        const jDirect = await rDirect.json();
+        const nb = (jDirect.data && jDirect.data.attributes && jDirect.data.attributes.numberOfAnswers) || 0;
+        console.log("[BoondMatch] Poll thread", threadId, "numberOfAnswers:", nb, "status:", rDirect.status);
+
+        // Si réponses détectées, les charger
+        const r2 = await fetch("https://ui.boondmanager.com/api/threads/" + threadId + "/answers?maxResults=20", {
+          headers: { "X-Jwt-Client-Boondmanager": jwt }
+        });
+        console.log("[BoondMatch] /answers status:", r2.status);
+        if(r2.ok){
+          const j2 = await r2.json();
+          answers = j2.data || [];
+          console.log("[BoondMatch] /answers data:", answers.length, answers.map(a=>((a.attributes||{}).text||'').replace(/<[^>]+>/g,' ').trim()));
+        } else {
+          // Fallback : chercher par parentThread
+          const r3 = await fetch("https://ui.boondmanager.com/api/threads?parentThread=" + threadId, {
             headers: { "X-Jwt-Client-Boondmanager": jwt }
           });
-          const json2 = await r2.json();
-          const all = json2.data || [];
-          // Garder uniquement les threads enfants du thread BoondMatch (parentThread = threadId)
-          answers = all.filter(t => {
-            const parent = (t.relationships && t.relationships.parentThread && t.relationships.parentThread.data);
-            return parent && String(parent.id) === String(threadId);
-          });
-          // Fallback : tous les threads plus récents que threadId sur cette opportunité
-          if(answers.length === 0){
-            answers = all.filter(t => parseInt(t.id) > parseInt(threadId));
-          }
-          console.log("[BoondMatch] Poll trouvé", all.length, "threads, filtrés:", answers.length, "réponses");
-        } catch(e2){ console.warn("[BoondMatch] Poll fetch error:", e2.message); }
-      }
+          console.log("[BoondMatch] ?parentThread status:", r3.status);
+          const j3 = await r3.json();
+          answers = j3.data || [];
+          console.log("[BoondMatch] ?parentThread data:", answers.length, JSON.stringify(answers.slice(0,2)));
+        }
+      } catch(e2){ console.warn("[BoondMatch] Poll error:", e2.message); }
       console.log("[BoondMatch] Poll réponses:", answers.length, answers.map(a=>(a.attributes||{}).text));
       for(const ans of answers){
         const raw = (ans.attributes && ans.attributes.text) || "";
