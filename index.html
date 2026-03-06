@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.31</div>
+<div id="version-badge">v2.32</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -1212,39 +1212,38 @@ async function pollThreadResponse(threadId, onApprove, onReject){
       });
       const json = await r.json();
       // Vérifier les threads enfants (réponses)
-      // Chercher les réponses via plusieurs endpoints
+      // Chercher les réponses : threads liés à l'opportunité avec id > threadId
       let answers = [];
-      // Endpoint 1 : réponses enfants du thread
-      try {
-        const r2 = await fetch("https://ui.boondmanager.com/api/threads?parentThread=" + threadId + "&maxResults=20", {
-          headers: { "X-Jwt-Client-Boondmanager": jwt }
-        });
-        const json2 = await r2.json();
-        answers = json2.data || [];
-      } catch(e2){}
-      // Endpoint 2 : chercher dans le fil de l'opportunité tous les threads récents
-      if(answers.length === 0 && state.need && state.need.id){
+      if(state.need && state.need.id){
         try {
-          const r3 = await fetch("https://ui.boondmanager.com/api/threads?dependsOn=" + state.need.id + "&maxResults=20", {
+          const r2 = await fetch("https://ui.boondmanager.com/api/threads?keywords=" + state.need.id + "&maxResults=50", {
             headers: { "X-Jwt-Client-Boondmanager": jwt }
           });
-          const json3 = await r3.json();
-          // Filtrer seulement les threads créés après le threadId
-          const all = json3.data || [];
-          answers = all.filter(t => parseInt(t.id) > parseInt(threadId));
-        } catch(e3){}
+          const json2 = await r2.json();
+          const all = json2.data || [];
+          // Garder uniquement les threads enfants du thread BoondMatch (parentThread = threadId)
+          answers = all.filter(t => {
+            const parent = (t.relationships && t.relationships.parentThread && t.relationships.parentThread.data);
+            return parent && String(parent.id) === String(threadId);
+          });
+          // Fallback : tous les threads plus récents que threadId sur cette opportunité
+          if(answers.length === 0){
+            answers = all.filter(t => parseInt(t.id) > parseInt(threadId));
+          }
+          console.log("[BoondMatch] Poll trouvé", all.length, "threads, filtrés:", answers.length, "réponses");
+        } catch(e2){ console.warn("[BoondMatch] Poll fetch error:", e2.message); }
       }
       console.log("[BoondMatch] Poll réponses:", answers.length, answers.map(a=>(a.attributes||{}).text));
       for(const ans of answers){
         const raw = (ans.attributes && ans.attributes.text) || "";
         const txt = raw.replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").trim().toUpperCase();
         console.log("[BoondMatch] Réponse nettoyée:", txt);
-        if(/OUI|OK|ACCORD|VALID/.test(txt)){
+        if(txt === "OUI" || txt === "OK" || txt.includes("OUI") || txt.includes("ACCORD") || txt.includes("VALID")){
           stopPoll();
           if(onApprove) onApprove();
           return;
         }
-        if(/NON|REFUS|KO/.test(txt)){
+        if(txt === "NON" || txt === "KO" || txt.includes("NON") || txt.includes("REFUS")){
           stopPoll();
           if(onReject) onReject();
           return;
