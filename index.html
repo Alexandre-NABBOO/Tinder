@@ -135,7 +135,11 @@
   .anim-spin  { display:inline-block; animation: spin 1.5s linear infinite; }
 
   /* ── VERSION BADGE ── */
-  #version-badge {
+  @keyframes pulse-green {
+  0%,100% { box-shadow: 0 0 0 0 #22c55e88; background: linear-gradient(135deg,#16a34a,#15803d); }
+  50%      { box-shadow: 0 0 0 8px #22c55e00; background: linear-gradient(135deg,#22c55e,#16a34a); }
+}
+#version-badge {
     position: fixed; top: 16px; left: 16px;
     background: #0f172a; border: 1px solid #334155;
     border-radius: 8px; padding: 5px 12px;
@@ -197,7 +201,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.34</div>
+<div id="version-badge">v2.35</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -1156,11 +1160,21 @@ function startWhatsApp(){
   state.validated.forEach((c,i)=>{
     if(!state.waMessages[c.id]){
       genWaMessage(c, i === 0 ? function(msg){
-        // Auto-ouvrir WhatsApp pour le 1er candidat dès que le message est prêt
+        // Transformer le bouton en lien direct (contourne le bloqueur de popups)
         if(c.phone && c.phone !== "—" && c.phone !== ""){
-          setTimeout(function(){
-            window.open("https://web.whatsapp.com/send?phone=" + c.phone.replace(/\D/g,"") + "&text=" + encodeURIComponent(msg), "_blank");
-          }, 500);
+          const waUrl = "https://web.whatsapp.com/send?phone=" + c.phone.replace(/\D/g,"") + "&text=" + encodeURIComponent(msg);
+          const sendBtn = document.querySelector('.btn-send[data-id="' + c.id + '"]');
+          if(sendBtn){
+            // Remplacer le bouton par un <a> qui s'ouvre sans popup blocker
+            const link = document.createElement('a');
+            link.href = waUrl;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.className = 'btn-send btn-wa';
+            link.style.cssText = 'text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;animation:pulse-green 1s infinite;';
+            link.innerHTML = '⊕ Ouvrir WhatsApp ✓';
+            sendBtn.replaceWith(link);
+          }
         }
       } : null);
     }
