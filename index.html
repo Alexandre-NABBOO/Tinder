@@ -201,7 +201,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.39</div>
+<div id="version-badge">v2.40</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -997,7 +997,7 @@ function bindValidation(){
                 data: {
                   type: "thread",
                   attributes: {
-                    text: "<div>✅ <b>Validation confirmée !</b></div><div><br></div><div>Cliquez pour contacter <b>" + candidate.firstName + " " + candidate.lastName + "</b> sur WhatsApp :</div><div><a href=\"" + waUrl + "\">" + waUrl + "</a></div>",
+                    text: "<div>✅ <b>Validation confirmée !</b></div><div><br></div><div>Cliquez pour contacter <b>" + candidate.firstName + " " + candidate.lastName + "</b> sur WhatsApp :</div><div><a href=\"" + waUrl + "\" target=\"_blank\">" + waUrl + "</a></div>",
                     share: false
                   },
                   relationships: {
@@ -1083,7 +1083,7 @@ function bindValidation(){
                     data: {
                       type: "thread",
                       attributes: {
-                        text: "<div>✅ <b>Validation confirmée !</b></div><div><br></div><div>Cliquez pour contacter <b>" + cand2.firstName + " " + cand2.lastName + "</b> sur WhatsApp :</div><div><a href=\"" + waUrl + "\">" + waUrl + "</a></div>",
+                        text: "<div>✅ <b>Validation confirmée !</b></div><div><br></div><div>Cliquez pour contacter <b>" + cand2.firstName + " " + cand2.lastName + "</b> sur WhatsApp :</div><div><a href=\"" + waUrl + "\" target=\"_blank\">" + waUrl + "</a></div>",
                         share: false
                       },
                       relationships: {
