@@ -197,7 +197,7 @@
   <div id="screen"></div>
 </div>
 
-<div id="version-badge">v2.29</div>
+<div id="version-badge">v2.30</div>
 <button onclick="diagGetAction()" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;z-index:9999">🔔 Diag Notif</button>
 
 <script>
@@ -696,6 +696,7 @@ async function startMatching(){
     .slice(0, 50); // Top 50 affichés
   state.scored = scored;
   state.need = needDetail;
+  state.proposalIndex = 0;  // reset à chaque nouveau besoin
 
   // Animate scores
   // Mettre à jour le compteur
@@ -824,90 +825,125 @@ function renderValidation(){
 function bindValidation(){
   const need   = state.need;
   const vs     = state.validationStatus;
-  const selIds = state.selectedCandidates;
-  const mn     = (need.manager && need.manager.name) || "";
-  const mname  = (mn && mn !== "—" && mn.trim() !== "") ? mn.trim() : null;
-  const managerLabel = mname || (need.managerId ? "Responsable (id:" + need.managerId + ")" : null);
+  const scored = state.scored;
+
+  // Candidat actuellement proposé (index dans le classement)
+  if(state.proposalIndex === undefined) state.proposalIndex = 0;
 
   function refresh(){
     document.getElementById('screen').innerHTML = renderValidation();
     bindValidation();
   }
 
+  function buildThreadMsg(candidate){
+    const tjm   = candidate.tjm   ? candidate.tjm + " €/j"           : "TJM non communiqué";
+    const dispo = candidate.availability && candidate.availability !== "—" ? candidate.availability : "à définir";
+    return [
+      "Bonjour,",
+      "",
+      "Suite à l'analyse IA du besoin « " + need.title + " » (" + need.id + "),",
+      "BoondMatch propose le profil suivant (rang #" + (state.proposalIndex + 1) + " du matching) :",
+      "",
+      "• " + candidate.firstName + " " + candidate.lastName,
+      "  Score : " + candidate.score + "% de match",
+      "  Poste : " + (candidate.title || "—"),
+      "  TJM   : " + tjm,
+      "  Dispo : " + dispo,
+      "  Lieu  : " + (candidate.location || "—"),
+      "",
+      "Répondez OUI pour valider ce profil, ou NON pour passer au suivant.",
+      "",
+      "Cordialement,",
+      "BoondMatch — NABBOO.AI"
+    ].join("\n");
+  }
+
+  async function proposeCandidate(index){
+    if(!scored || index >= scored.length){
+      notifArea.innerHTML = "<div style=\"color:#ef4444;font-weight:700\">❌ Plus aucun candidat disponible dans le classement.</div>";
+      return;
+    }
+    const candidate = scored[index];
+    state.proposalIndex = index;
+    state.selectedCandidates = [candidate.id];
+
+    notifArea.innerHTML = "<div style=\"color:#f59e0b;font-size:12px\">⏳ Envoi de la proposition #" + (index+1) + " sur le fil Boond...</div>";
+
+    const msg = buildThreadMsg(candidate);
+    const threadId = await sendBoondNotification(need.managerId, need.id, need.jsonApiType || "opportunity", need.title, msg);
+    state.threadId = threadId || null;
+    state.validationStatus = "notified";
+
+    if(threadId){
+      showWaiting(index, candidate);
+      pollThreadResponse(
+        threadId,
+        function(){ // OUI → approuvé
+          stopPoll();
+          state.validationStatus = "approved";
+          refresh();
+        },
+        function(){ // NON → proposer suivant
+          stopPoll();
+          state.validationStatus = "pending";
+          proposeCandidate(index + 1);
+        }
+      );
+    } else {
+      notifArea.innerHTML = "<div style=\"color:#ef4444;font-size:12px\">⚠️ Échec de l\'envoi sur Boond.</div>"
+        + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
+        + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">✅ Valider manuellement</button>"
+        + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">❌ Passer au suivant</button>"
+        + "</div>";
+      document.getElementById("btn-yes").addEventListener("click", function(){ state.validationStatus="approved"; refresh(); });
+      document.getElementById("btn-no").addEventListener("click",  function(){ proposeCandidate(index + 1); });
+    }
+  }
+
+  function showWaiting(index, candidate){
+    notifArea.innerHTML = "<div style=\"color:#22c55e;font-size:12px;margin-bottom:6px\">✅ Proposition #" + (index+1) + " envoyée sur le fil Boond</div>"
+      + "<div style=\"color:#f1f5f9;font-size:12px;margin-bottom:4px\">👤 <b>" + escHtml(candidate.firstName + " " + candidate.lastName) + "</b> — " + candidate.score + "% match</div>"
+      + "<div style=\"color:#94a3b8;font-size:11px;margin-bottom:10px\">⏳ En attente de réponse du manager dans Boond (OUI / NON)...</div>"
+      + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
+      + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">✅ Valider manuellement</button>"
+      + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">⏭ Passer au suivant</button>"
+      + "</div>";
+    document.getElementById("btn-yes").addEventListener("click", function(){ stopPoll(); state.validationStatus="approved"; refresh(); });
+    document.getElementById("btn-no").addEventListener("click",  function(){ stopPoll(); proposeCandidate(state.proposalIndex + 1); });
+  }
+
   // ── 1. Injecter notif-area EN PREMIER (avant d'attacher les listeners) ──
   const notifArea = document.getElementById("notif-area");
   if(notifArea){
-    function showYesNo(pre){
-      notifArea.innerHTML = pre
-        + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
-        + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">Oui, validé</button>"
-        + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">Non, refus</button>"
-        + "</div>";
-      document.getElementById("btn-yes").addEventListener("click", function(){ state.validationStatus="approved"; refresh(); });
-      document.getElementById("btn-no").addEventListener("click",  function(){ state.validationStatus="rejected"; refresh(); });
-    }
-
     if(vs === "pending"){
-      const canN = selIds.length > 0 && (need.managerId || mname);
-      const disAttr  = canN ? "" : " disabled";
-      const disStyle = canN ? "" : " style=\"opacity:0.4\"";
-      notifArea.innerHTML = "<button class=\"btn btn-blue\" id=\"btn-notify\"" + disAttr + disStyle + ">Demander validation à " + escHtml(managerLabel || "le responsable") + "</button>";
-      const btnN = document.getElementById("btn-notify");
-      if(btnN && !btnN.disabled){
-        btnN.addEventListener("click", async function(){
-          btnN.disabled = true;
-          btnN.textContent = "Envoi...";
-          const sel = state.scored.filter(function(c){ return state.selectedCandidates.includes(c.id); });
-          const lines = sel.map(function(c){
-            const tjm  = c.tjm  ? c.tjm  + " €/j"  : "TJM n/c";
-            const dispo = c.availability || "dispo n/c";
-            return "• " + c.firstName + " " + c.lastName + " — " + c.score + "% de match | " + tjm + " | " + dispo;
-          });
-          const txt = [
-            "Bonjour,",
-            "",
-            "Suite à l'analyse IA du besoin « " + need.title + " » (" + need.id + "), voici les profils sélectionnés :",
-            "",
-            ...lines,
-            "",
-            "Merci de confirmer votre accord pour les contacter.",
-            "",
-            "Cordialement,",
-            "BoondMatch — NABBOO.AI"
-          ].join("\n");
-          const threadId = await sendBoondNotification(need.managerId, need.id, need.jsonApiType || "opportunity", need.title, txt);
-          state.validationStatus = "notified";
-          state.threadId = threadId || null;
-          if(threadId){
-            pollThreadResponse(threadId);
-            notifArea.innerHTML = "<div style=\"color:#22c55e;font-size:12px;margin-bottom:8px\">✅ Message posté sur le fil Boond</div>"
-              + "<div style=\"color:#94a3b8;font-size:11px;margin-bottom:10px\">⏳ En attente de réponse du manager dans Boond (OUI / NON)...</div>"
-              + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
-              + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">Valider manuellement</button>"
-              + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">Refuser manuellement</button>"
-              + "</div>";
-            document.getElementById("btn-yes").addEventListener("click", function(){ stopPoll(); state.validationStatus="approved"; refresh(); });
-            document.getElementById("btn-no").addEventListener("click",  function(){ stopPoll(); state.validationStatus="rejected"; refresh(); });
-          } else {
-            showYesNo("<div style=\"color:#f59e0b;font-size:12px;margin-bottom:8px\">⚠️ Envoi échoué — validez manuellement</div>");
-          }
-        });
+      // AUTO-ENVOI : proposer immédiatement le candidat #1 si manager disponible
+      if(scored.length > 0 && (need.managerId) && !state.isMock){
+        notifArea.innerHTML = "<div style=\"color:#f59e0b;font-size:12px\">⏳ Analyse terminée — envoi automatique de la proposition...</div>";
+        setTimeout(function(){ proposeCandidate(state.proposalIndex || 0); }, 800);
+      } else {
+        notifArea.innerHTML = "<div style=\"color:#94a3b8;font-size:12px\">Aucun manager identifié — validez manuellement.</div>"
+          + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
+          + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">✅ Valider</button>"
+          + "</div>";
+        document.getElementById("btn-yes").addEventListener("click", function(){ state.validationStatus="approved"; refresh(); });
       }
     } else if(vs === "notified"){
-      // Reprendre le poll si on a un threadId et que le poll est arrêté
-      if(state.threadId && !_pollInterval) pollThreadResponse(state.threadId);
-      notifArea.innerHTML = "<div style=\"color:#22c55e;font-size:12px;margin-bottom:8px\">✅ Message posté sur le fil Boond</div>"
-        + "<div style=\"color:#94a3b8;font-size:11px;margin-bottom:10px\">⏳ En attente de réponse du manager (OUI / NON dans Boond)...</div>"
-        + "<div style=\"display:flex;gap:10px;margin-top:10px\">"
-        + "<button class=\"btn btn-green\" id=\"btn-yes\" style=\"flex:1\">Valider manuellement</button>"
-        + "<button class=\"btn\" id=\"btn-no\" style=\"flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff\">Refuser manuellement</button>"
-        + "</div>";
-      document.getElementById("btn-yes").addEventListener("click", function(){ stopPoll(); state.validationStatus="approved"; refresh(); });
-      document.getElementById("btn-no").addEventListener("click",  function(){ stopPoll(); state.validationStatus="rejected"; refresh(); });
+      // Reprendre le poll si page re-render
+      const cand = scored[state.proposalIndex || 0];
+      if(state.threadId && !_pollInterval && cand){
+        showWaiting(state.proposalIndex || 0, cand);
+        pollThreadResponse(
+          state.threadId,
+          function(){ stopPoll(); state.validationStatus="approved"; refresh(); },
+          function(){ stopPoll(); state.validationStatus="pending"; proposeCandidate((state.proposalIndex||0) + 1); }
+        );
+      } else if(cand){
+        showWaiting(state.proposalIndex || 0, cand);
+      }
     } else if(vs === "approved"){
-      notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px;margin-bottom:10px\">✅ Validé !</div>";
+      notifArea.innerHTML = "<div style=\"color:#22c55e;font-weight:700;font-size:13px;margin-bottom:10px\">✅ Validé par le manager !</div>";
     } else if(vs === "rejected"){
-      notifArea.innerHTML = "<div style=\"color:#ef4444;font-weight:700;font-size:13px;margin-bottom:10px\">❌ Refusé - modifiez la sélection</div>";
+      notifArea.innerHTML = "<div style=\"color:#ef4444;font-weight:700;font-size:13px;margin-bottom:10px\">❌ Refusé</div>";
     }
   }
 
@@ -1039,7 +1075,7 @@ function startWhatsApp(){
       const id  = sendBtn.dataset.id;
       const phone = sendBtn.dataset.phone;
       const msg = state.waMessages[id]||'';
-      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
+      window.open(`https://web.whatsapp.com/send?phone=${phone.replace(/\D/g,'')}&text=${encodeURIComponent(msg)}`,'_blank');
       state.waSent[id]=true;
       // Update badge
       const card = document.getElementById(`wa-${id}`);
@@ -1085,36 +1121,41 @@ async function diagGetAction(){
 let _pollInterval = null;
 function stopPoll(){ if(_pollInterval){ clearInterval(_pollInterval); _pollInterval = null; } }
 
-async function pollThreadResponse(threadId){
+async function pollThreadResponse(threadId, onApprove, onReject){
   stopPoll();
   console.log("[BoondMatch] Poll démarré sur thread", threadId);
   _pollInterval = setInterval(async function(){
     try {
       const jwt = await buildJWT(state.userToken, state.clientToken, state.clientKey);
-      const r = await fetch("https://ui.boondmanager.com/api/threads?parentThread=" + threadId + "&maxResults=10", {
+      // GET sur le thread lui-même pour voir ses réponses (answers)
+      const r = await fetch("https://ui.boondmanager.com/api/threads/" + threadId, {
         headers: { "X-Jwt-Client-Boondmanager": jwt }
       });
       const json = await r.json();
-      const answers = json.data || [];
-      console.log("[BoondMatch] Poll réponses:", answers.length);
+      // Vérifier les threads enfants (réponses)
+      const r2 = await fetch("https://ui.boondmanager.com/api/threads?parentThread=" + threadId + "&maxResults=20&orderBy=id&order=desc", {
+        headers: { "X-Jwt-Client-Boondmanager": jwt }
+      });
+      const json2 = await r2.json();
+      const answers = json2.data || [];
+      console.log("[BoondMatch] Poll réponses:", answers.length, answers.map(a=>(a.attributes||{}).text));
       for(const ans of answers){
-        const txt = (ans.attributes && ans.attributes.text || "").replace(/<[^>]+>/g,"").trim().toUpperCase();
-        console.log("[BoondMatch] Réponse texte:", txt);
-        if(txt.includes("OUI") || txt.includes("OK") || txt.includes("ACCORD") || txt.includes("VALID")){
+        const raw = (ans.attributes && ans.attributes.text) || "";
+        const txt = raw.replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").trim().toUpperCase();
+        console.log("[BoondMatch] Réponse nettoyée:", txt);
+        if(/OUI|OK|ACCORD|VALID/.test(txt)){
           stopPoll();
-          state.validationStatus = "approved";
-          refresh();
+          if(onApprove) onApprove();
           return;
         }
-        if(txt.includes("NON") || txt.includes("REFUS") || txt.includes("KO")){
+        if(/NON|REFUS|KO/.test(txt)){
           stopPoll();
-          state.validationStatus = "rejected";
-          refresh();
+          if(onReject) onReject();
           return;
         }
       }
     } catch(e){ console.warn("[BoondMatch] Poll error:", e.message); }
-  }, 15000); // toutes les 15 secondes
+  }, 10000); // toutes les 10 secondes
 }
 // ═══════════════════════════════════════════════════════
 // BOOT
